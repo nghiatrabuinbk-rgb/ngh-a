@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "AuthorizedUser": {
+      "title": "AuthorizedUser",
+      "description": "Authorized teacher or administrator account allowed to manage boarding students",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Gmail address of the teacher or administrator" },
+        "name": { "type": "string", "description": "Full name of the teacher" },
+        "role": { "type": "string", "description": "Role: admin or teacher", "enum": ["admin", "teacher"] },
+        "assignedRooms": { "type": "array", "description": "List of room IDs assigned to this duty teacher" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "zaloQrData": { "type": "string", "description": "Zalo personal QR code data or Zalo profile link for instant QR login" },
+        "zaloId": { "type": "string", "description": "Zalo user identifier or username" },
+        "active": { "type": "boolean", "description": "Whether this user is currently active" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      },
+      "required": ["email", "name", "role", "active"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Boarding student demographic and location information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of the student" },
+        "name": { "type": "string", "description": "Full name of student" },
+        "gender": { "type": "string", "description": "Gender: Nam or Nu", "enum": ["Nam", "Nữ"] },
+        "dob": { "type": "string", "description": "Date of birth (YYYY-MM-DD)" },
+        "room": { "type": "string", "description": "Assigned boarding room (e.g. Phòng 1)" },
+        "class": { "type": "string", "description": "Class grade (e.g. 6A, 7B)" },
+        "village": { "type": "string", "description": "Village (Thôn) where student originates from" },
+        "hamlet": { "type": "string", "description": "Hamlet / Mountain settlement (Nóc)" },
+        "ethnicity": { "type": "string", "description": "Ethnic minority group (e.g. Ca Dong, M'Nông, Co, Kinh)" },
+        "parentPhone": { "type": "string", "description": "Parent contact phone number" },
+        "notes": { "type": "string", "description": "Specific student notes, circumstances, health or remarks" },
+        "status": { "type": "string", "description": "Enrollment status", "enum": ["active", "graduated", "transferred"] },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
+      },
+      "required": ["name", "gender", "room", "class", "village", "hamlet", "status"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Daily student boarding status record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique composite ID {date}_{studentId}" },
+        "date": { "type": "string", "description": "Attendance date (YYYY-MM-DD)" },
+        "studentId": { "type": "string", "description": "Referenced student ID" },
+        "studentName": { "type": "string", "description": "Student full name for snapshot reporting" },
+        "room": { "type": "string", "description": "Dormitory room" },
+        "class": { "type": "string", "description": "Class name" },
+        "village": { "type": "string", "description": "Village (Thôn)" },
+        "hamlet": { "type": "string", "description": "Hamlet / Mountain settlement (Nóc)" },
+        "status": {
+          "type": "string",
+          "description": "Daily status: present, ate_no_class, not_at_school_this_week, leave_excused, leave_unexcused",
+          "enum": ["present", "ate_no_class", "not_at_school_this_week", "leave_excused", "leave_unexcused"]
+        },
+        "stayWeekend": { "type": "boolean", "description": "Whether student stays at boarding school over the weekend" },
+        "note": { "type": "string", "description": "Specific note or absence reason" },
+        "recordedByEmail": { "type": "string", "description": "Email of the duty teacher who recorded" },
+        "recordedByName": { "type": "string", "description": "Name of the teacher" },
+        "recordedAt": { "type": "string", "description": "Timestamp when recorded" }
+      },
+      "required": ["date", "studentId", "status", "room", "class", "village", "hamlet"]
+    },
+    "RoomSummary": {
+      "title": "RoomSummary",
+      "description": "Daily summary for a single boarding room reported by duty teacher",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID {date}_{roomId}" },
+        "date": { "type": "string", "description": "Date (YYYY-MM-DD)" },
+        "roomId": { "type": "string", "description": "Room name/number" },
+        "teacherEmail": { "type": "string", "description": "Email of reporting teacher" },
+        "teacherName": { "type": "string", "description": "Name of reporting teacher" },
+        "totalStudents": { "type": "number", "description": "Total students in room" },
+        "presentCount": { "type": "number", "description": "Present count" },
+        "ateNoClassCount": { "type": "number", "description": "Ate but skipped school count" },
+        "notAtSchoolThisWeekCount": { "type": "number", "description": "Not yet at school this week count" },
+        "leaveExcusedCount": { "type": "number", "description": "Excused leave count" },
+        "leaveUnexcusedCount": { "type": "number", "description": "Unexcused leave count" },
+        "stayWeekendCount": { "type": "number", "description": "Number of students staying over the weekend in this room" },
+        "notes": { "type": "string", "description": "Duty notes or incidents" },
+        "submitted": { "type": "boolean", "description": "Whether finalized by teacher" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
+      },
+      "required": ["date", "roomId", "totalStudents", "presentCount"]
+    },
+    "SchoolConfig": {
+      "title": "SchoolConfig",
+      "description": "System settings such as rooms list, classes list, villages, and hamlets",
+      "type": "object",
+      "properties": {
+        "schoolName": { "type": "string", "description": "School name" },
+        "schoolYear": { "type": "string", "description": "Academic year" },
+        "rooms": { "type": "array", "description": "List of room names" },
+        "classes": { "type": "array", "description": "List of class names" },
+        "villages": { "type": "array", "description": "List of villages (Thôn)" },
+        "hamlets": { "type": "array", "description": "List of hamlets (Nóc)" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
+      },
+      "required": ["schoolName", "rooms", "classes"]
+    }
+  },
+  "firestore": {
+    "/authorized_users/{userId}": {
+      "schema": "AuthorizedUser",
+      "description": "Teacher and administrator authorized accounts"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Boarding students registry"
+    },
+    "/attendance_records/{recordId}": {
+      "schema": "AttendanceRecord",
+      "description": "Daily student attendance and meal/school status records"
+    },
+    "/room_summaries/{summaryId}": {
+      "schema": "RoomSummary",
+      "description": "Daily room-level duty reports and summaries"
+    },
+    "/school_config/{configId}": {
+      "schema": "SchoolConfig",
+      "description": "Global school boarding configurations and master lists"
+    }
+  }
+}

@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isInitialAdmin() {
+      return isSignedIn() && 
+        (request.auth.token.email == 'nghiatrabui.nbk@gmail.com' ||
+         (request.auth.token.email_verified == true && request.auth.token.email == 'nghiatrabui.nbk@gmail.com'));
+    }
+
+    function isAuthorizedUser() {
+      return isSignedIn() && (
+        isInitialAdmin() ||
+        exists(/databases/$(database)/documents/authorized_users/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/authorized_users/$(request.auth.token.email))
+      );
+    }
+
+    // Connection testing doc
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // Authorized users list
+    match /authorized_users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isInitialAdmin() || (isSignedIn() && request.auth.uid == userId);
+    }
+
+    // Students collection
+    match /students/{studentId} {
+      allow read: if isAuthorizedUser();
+      allow create, update: if isAuthorizedUser();
+      allow delete: if isAuthorizedUser();
+    }
+
+    // Attendance records
+    match /attendance_records/{recordId} {
+      allow read: if isAuthorizedUser();
+      allow create, update: if isAuthorizedUser();
+      allow delete: if isAuthorizedUser();
+    }
+
+    // Room summaries
+    match /room_summaries/{summaryId} {
+      allow read: if isAuthorizedUser();
+      allow create, update: if isAuthorizedUser();
+      allow delete: if isAuthorizedUser();
+    }
+
+    // Night study attendance records (Independent)
+    match /night_study_attendance/{recordId} {
+      allow read: if isAuthorizedUser();
+      allow create, update: if isAuthorizedUser();
+      allow delete: if isAuthorizedUser();
+    }
+
+    // Night study room summaries
+    match /night_room_summaries/{summaryId} {
+      allow read: if isAuthorizedUser();
+      allow create, update: if isAuthorizedUser();
+      allow delete: if isAuthorizedUser();
+    }
+
+    // School config
+    match /school_config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAuthorizedUser();
+    }
+  }
+}

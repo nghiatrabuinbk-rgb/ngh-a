@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" />
+      <stop offset="50%" stop-color="#047857" />
+      <stop offset="100%" stop-color="#0f766e" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded rect -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Subtle inner border -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="4" />
+
+  <!-- Center Group with Shadow -->
+  <g filter="url(#shadow)">
+    <!-- School / Boarding Home Roof -->
+    <path d="M 256 96 L 104 216 L 144 216 L 144 384 L 368 384 L 368 216 L 408 216 Z" fill="#ffffff" opacity="0.95" />
+
+    <!-- Roof Ridge Gold Accent -->
+    <path d="M 256 80 L 88 212 L 112 232 L 256 120 L 400 232 L 424 212 Z" fill="url(#goldGrad)" />
+
+    <!-- Door / Gate Entrance -->
+    <path d="M 224 384 L 224 288 C 224 270 238 256 256 256 C 274 256 288 270 288 288 L 288 384 Z" fill="#047857" />
+
+    <!-- Left & Right Windows -->
+    <rect x="168" y="260" width="36" height="48" rx="6" fill="#0284c7" opacity="0.85" />
+    <rect x="308" y="260" width="36" height="48" rx="6" fill="#0284c7" opacity="0.85" />
+
+    <!-- Star / Emblem in Gable -->
+    <path d="M 256 172 L 263 192 L 284 192 L 267 204 L 273 224 L 256 212 L 239 224 L 245 204 L 228 192 L 249 192 Z" fill="url(#goldGrad)" />
+
+    <!-- Boarding Bed / Sleep Icon beneath or badge -->
+    <rect x="120" y="404" width="272" height="18" rx="9" fill="url(#goldGrad)" />
+
+    <!-- Checkmark Badge on right (Attendance) -->
+    <circle cx="376" cy="360" r="48" fill="#10b981" stroke="#ffffff" stroke-width="6" />
+    <path d="M 356 360 L 370 374 L 398 346" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <!-- School Tag Text -->
+  <text x="256" y="468" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="800" fill="#f8fafc" letter-spacing="4">TRÀ ĐỐC</text>
+</svg>

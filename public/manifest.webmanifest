@@ -1,0 +1,40 @@
+{
+  "id": "/",
+  "name": "Quản Lý Học Sinh Nội Trú - THCS Trà Đốc",
+  "short_name": "QLNT Trà Đốc",
+  "description": "Hệ thống quản lý sĩ số học sinh nội trú Trường PTDTBT THCS Trà Đốc - TP Đà Nẵng",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#047857",
+  "background_color": "#064e3b",
+  "lang": "vi",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

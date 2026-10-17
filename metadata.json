@@ -1,0 +1,6 @@
+{
+  "name": "Quản Lý Học Sinh Nội Trú",
+  "description": "Hệ thống quản lý sĩ số học sinh nội trú hằng ngày, điểm danh ăn ở, nghỉ phép, thống kê theo phòng, lớp, thôn, nóc và xuất báo cáo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
