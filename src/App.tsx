@@ -19,7 +19,8 @@ import {
   AggregatedStats, 
   AttendanceStatus,
   NightStudyRecord,
-  NightRoomSummary
+  NightRoomSummary,
+  RoomConfig
 } from './types';
 import { 
   INITIAL_ROOMS, 
@@ -27,7 +28,8 @@ import {
   INITIAL_VILLAGES, 
   INITIAL_HAMLETS, 
   INITIAL_ADMIN_EMAIL,
-  SEED_STUDENTS
+  SEED_STUDENTS,
+  DEFAULT_ROOM_CONFIGS
 } from './mockData';
 import { 
   fetchStudents, 
@@ -43,12 +45,21 @@ import {
   fetchNightAttendanceForDate,
   saveNightAttendanceRecords,
   fetchNightRoomSummaries,
-  saveNightRoomSummary
+  saveNightRoomSummary,
+  fetchRoomConfigs,
+  saveRoomConfig,
+  deleteRoomConfig,
+  deleteMultipleRoomConfigs,
+  resetRoomConfigs,
+  clearAllStudents,
+  saveStudentsBatch
 } from './services/dataService';
 import { Header } from './components/Header';
 import { StatSummaryCards } from './components/StatSummaryCards';
 import { DailyAttendanceView } from './components/DailyAttendanceView';
 import { NightStudyAttendanceView } from './components/NightStudyAttendanceView';
+import { CompetitionScoringView } from './components/CompetitionScoringView';
+import { RoomDutyAttendanceView } from './components/RoomDutyAttendanceView';
 import { MasterReportView } from './components/MasterReportView';
 import { StudentManagementView } from './components/StudentManagementView';
 import { PermissionsManagementView } from './components/PermissionsManagementView';
@@ -59,7 +70,7 @@ import {
   LogIn, 
   CheckCircle, 
   Users, 
-  Sparkles,
+  Sparkles, 
   AlertCircle,
   QrCode,
   Smartphone
@@ -73,7 +84,7 @@ export default function App() {
   });
 
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState<'attendance' | 'night_study' | 'report' | 'students' | 'permissions'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'night_study' | 'competition' | 'room_duty' | 'report' | 'students' | 'permissions'>('attendance');
 
   // Status card filter selection
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<AttendanceStatus | 'all' | 'stay_weekend'>('all');
@@ -95,6 +106,7 @@ export default function App() {
 
   // App data states (Day Attendance)
   const [students, setStudents] = useState<Student[]>([]);
+  const [roomConfigs, setRoomConfigs] = useState<RoomConfig[]>(DEFAULT_ROOM_CONFIGS);
   const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceRecord>>({});
   const [roomSummaries, setRoomSummaries] = useState<Record<string, RoomSummary>>({});
 
@@ -105,14 +117,23 @@ export default function App() {
   const [authorizedUsers, setAuthorizedUsers] = useState<AuthorizedUser[]>([]);
   const [loadingData, setLoadingData] = useState<boolean>(true);
 
-  // Master dynamic lists (derived from initial presets + all rooms/classes/locations entered for students)
+  // Master dynamic lists (derived from roomConfigs + any rooms present in students)
   const rooms = useMemo(() => {
-    const set = new Set<string>(INITIAL_ROOMS);
+    const listFromConfig = roomConfigs.map((r) => r.name);
+    const set = new Set<string>(listFromConfig.length > 0 ? listFromConfig : INITIAL_ROOMS);
     students.forEach((s) => {
       if (s.room && s.room.trim()) set.add(s.room.trim());
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
-  }, [students]);
+    return Array.from(set).sort((a, b) => {
+      // Keep natural order of rooms (Phòng Nam 01..12 then Phòng Nữ 13..25)
+      const confA = roomConfigs.find((r) => r.name === a);
+      const confB = roomConfigs.find((r) => r.name === b);
+      if (confA?.order && confB?.order) {
+        return confA.order - confB.order;
+      }
+      return a.localeCompare(b, 'vi', { numeric: true });
+    });
+  }, [roomConfigs, students]);
 
   const classes = useMemo(() => {
     const set = new Set<string>(INITIAL_CLASSES);
@@ -153,17 +174,21 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Load authorized users and students on startup
+  // Load authorized users, students, and room configs on startup
   useEffect(() => {
     async function loadInitialData() {
       setLoadingData(true);
       try {
-        const [users, studentList] = await Promise.all([
+        const [users, studentList, configs] = await Promise.all([
           fetchAuthorizedUsers(),
           fetchStudents(),
+          fetchRoomConfigs(),
         ]);
         setAuthorizedUsers(users);
         setStudents(studentList);
+        if (configs && configs.length > 0) {
+          setRoomConfigs(configs);
+        }
       } catch (err) {
         console.error('Error loading initial data:', err);
       } finally {
@@ -254,12 +279,43 @@ export default function App() {
   }, [zaloUser, currentUser, guestMode]);
 
   const isUserAuthorized = Boolean(authorizedInfo);
-  const isAdmin = authorizedInfo?.role === 'admin';
+  const isAdmin = authorizedInfo?.role === 'admin' || guestMode;
+
+  // Quyền truy cập các trạng thái theo phân quyền của Quản trị viên:
+  // Cấp quyền trạng thái nào thì chỉ được xem và chỉnh sửa trạng thái đó, không được xem/sửa trạng thái khác
+  const allowedTabs = useMemo<('attendance' | 'night_study' | 'competition' | 'room_duty' | 'report' | 'students' | 'permissions')[]>(() => {
+    // Quản trị viên (BGH / Demo Admin): Toàn quyền tất cả các trạng thái
+    if (isAdmin) {
+      return ['attendance', 'night_study', 'competition', 'room_duty', 'report', 'students', 'permissions'];
+    }
+
+    // Giáo viên đăng nhập bằng Gmail / Zalo QR: chỉ được xem và sửa trạng thái đã cấp
+    if (authorizedInfo) {
+      const granted = authorizedInfo.allowedModules;
+      if (granted && granted.length > 0) {
+        return granted;
+      }
+      return ['room_duty'];
+    }
+
+    // Khi chưa đăng nhập (khách xem demo ban đầu)
+    return ['attendance', 'night_study', 'competition', 'room_duty'];
+  }, [isAdmin, authorizedInfo]);
+
+  // Tự động chuyển về trạng thái được cấp phép nếu trạng thái hiện tại không có quyền
+  useEffect(() => {
+    if (effectiveUser && !allowedTabs.includes(activeTab)) {
+      if (allowedTabs.length > 0) {
+        setActiveTab(allowedTabs[0]);
+      }
+    }
+  }, [effectiveUser, allowedTabs, activeTab]);
 
   // Compute Aggregated Statistics
   const aggregatedStats = useMemo<AggregatedStats>(() => {
     const activeStudents = students.filter((s) => s.status === 'active');
     let present = 0;
+    let skippedClass = 0;
     let ateNoClass = 0;
     let notAtSchool = 0;
     let leaveExcused = 0;
@@ -270,6 +326,7 @@ export default function App() {
       const record = attendanceMap[s.id];
       const status = record?.status || 'present';
       if (status === 'present') present++;
+      else if (status === 'skipped_class') skippedClass++;
       else if (status === 'ate_no_class') ateNoClass++;
       else if (status === 'not_at_school_this_week') notAtSchool++;
       else if (status === 'leave_excused') leaveExcused++;
@@ -280,6 +337,7 @@ export default function App() {
     return {
       total: activeStudents.length,
       present,
+      skippedClass,
       ateNoClass,
       notAtSchoolThisWeek: notAtSchool,
       leaveExcused,
@@ -387,6 +445,98 @@ export default function App() {
     setStudents((prev) => prev.filter((s) => s.id !== studentId));
   };
 
+  const handleClearAllStudents = async () => {
+    await clearAllStudents();
+    setStudents([]);
+  };
+
+  const handleSaveBatchStudents = async (newStudents: Student[], replaceRoom?: string) => {
+    const updated = await saveStudentsBatch(newStudents, replaceRoom);
+    setStudents(updated);
+  };
+
+  const handleSaveRoomConfig = async (room: RoomConfig) => {
+    await saveRoomConfig(room);
+    setRoomConfigs((prev) => {
+      const idx = prev.findIndex((r) => r.id === room.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = room;
+        return copy;
+      }
+      return [...prev, room];
+    });
+  };
+
+  const handleDeleteRoomConfig = async (roomId: string, targetNewRoomForStudents?: string) => {
+    const roomToDelete = roomConfigs.find((r) => r.id === roomId);
+    const roomName = roomToDelete?.name;
+
+    await deleteRoomConfig(roomId);
+    setRoomConfigs((prev) => prev.filter((r) => r.id !== roomId));
+
+    if (roomName) {
+      const destination = targetNewRoomForStudents || 'Chưa xếp phòng';
+      const affected = students.filter((s) => s.room === roomName);
+      if (affected.length > 0) {
+        for (const st of affected) {
+          await saveStudent({
+            ...st,
+            room: destination,
+            bedNumber: destination === 'Chưa xếp phòng' ? '' : st.bedNumber,
+          });
+        }
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.room === roomName
+              ? {
+                  ...s,
+                  room: destination,
+                  bedNumber: destination === 'Chưa xếp phòng' ? '' : s.bedNumber,
+                }
+              : s
+          )
+        );
+      }
+    }
+  };
+
+  const handleDeleteMultipleRoomConfigs = async (roomIds: string[], targetNewRoomForStudents?: string) => {
+    const roomsToDelete = roomConfigs.filter((r) => roomIds.includes(r.id));
+    const roomNamesToDelete = new Set(roomsToDelete.map((r) => r.name));
+
+    await deleteMultipleRoomConfigs(roomIds);
+    setRoomConfigs((prev) => prev.filter((r) => !roomIds.includes(r.id)));
+
+    const destination = targetNewRoomForStudents || 'Chưa xếp phòng';
+    const affected = students.filter((s) => roomNamesToDelete.has(s.room));
+    if (affected.length > 0) {
+      for (const st of affected) {
+        await saveStudent({
+          ...st,
+          room: destination,
+          bedNumber: destination === 'Chưa xếp phòng' ? '' : st.bedNumber,
+        });
+      }
+      setStudents((prev) =>
+        prev.map((s) =>
+          roomNamesToDelete.has(s.room)
+            ? {
+                ...s,
+                room: destination,
+                bedNumber: destination === 'Chưa xếp phòng' ? '' : s.bedNumber,
+              }
+            : s
+        )
+      );
+    }
+  };
+
+  const handleResetRoomConfigs = async () => {
+    const configs = await resetRoomConfigs();
+    setRoomConfigs(configs);
+  };
+
   const handleResetSeedData = async () => {
     localStorage.removeItem('qlnt_students_v1');
     const newStudents: Student[] = [];
@@ -430,6 +580,8 @@ export default function App() {
         onDateChange={setCurrentDate}
         currentUser={effectiveUser}
         authorizedInfo={authorizedInfo}
+        isAdmin={isAdmin}
+        allowedTabs={allowedTabs}
         onLogin={handleLogin}
         onOpenZaloLogin={() => setIsZaloModalOpen(true)}
         onLogout={handleLogout}
@@ -518,7 +670,47 @@ export default function App() {
         )}
 
         {/* KPI Stat Summary Cards (Visible for day attendance & reports) */}
-        {activeTab !== 'night_study' && (
+        {/* Access Denied Notice when logged-in teacher tries to access an unauthorized status */}
+        {effectiveUser && !allowedTabs.includes(activeTab) && (
+          <div className="bg-white rounded-2xl p-8 border border-rose-300 text-center max-w-lg mx-auto shadow-sm space-y-4 my-8">
+            <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto text-rose-600">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-lg">Bạn không có quyền xem hoặc chỉnh sửa trạng thái này</h3>
+            <p className="text-xs text-slate-600">
+              Tài khoản Gmail <strong>{effectiveUser.email}</strong> chỉ được quản trị viên cấp quyền thao tác ở trạng thái:
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 pt-1">
+              {allowedTabs.map((t) => {
+                const nameMap: Record<string, string> = {
+                  attendance: 'Điểm danh của GVCN',
+                  night_study: 'Điểm danh tự học đêm',
+                  competition: 'Chấm điểm thi đua',
+                  room_duty: 'Theo dõi & điểm danh GV trực phòng',
+                  report: 'Tổng hợp báo cáo',
+                  students: 'Danh sách học sinh',
+                  permissions: 'Phân quyền',
+                };
+                return (
+                  <span key={t} className="bg-emerald-100 text-emerald-900 font-bold px-3 py-1 rounded-xl text-xs border border-emerald-300">
+                    ✓ {nameMap[t] || t}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="pt-2">
+              <button
+                onClick={() => setActiveTab(allowedTabs[0])}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition shadow cursor-pointer"
+              >
+                Chuyển đến trạng thái được cấp phép của bạn
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* KPI Stat Summary Cards (Visible only when allowed to view attendance or report) */}
+        {activeTab !== 'night_study' && activeTab !== 'competition' && activeTab !== 'room_duty' && allowedTabs.includes(activeTab) && (
           <StatSummaryCards
             stats={aggregatedStats}
             selectedFilter={selectedStatusFilter}
@@ -531,8 +723,8 @@ export default function App() {
           />
         )}
 
-        {/* Tab 1: Daily Attendance */}
-        {activeTab === 'attendance' && (
+        {/* Tab 1: Daily Attendance (Điểm danh của GVCN) */}
+        {activeTab === 'attendance' && allowedTabs.includes('attendance') && (
           <DailyAttendanceView
             currentDate={currentDate}
             students={students}
@@ -552,7 +744,7 @@ export default function App() {
         )}
 
         {/* Tab 2: Independent Night Study Duty Attendance (25 Rooms) */}
-        {activeTab === 'night_study' && (
+        {activeTab === 'night_study' && allowedTabs.includes('night_study') && (
           <NightStudyAttendanceView
             currentDate={currentDate}
             onDateChange={setCurrentDate}
@@ -567,8 +759,44 @@ export default function App() {
           />
         )}
 
-        {/* Tab 2: Master Consolidated Report & Export */}
-        {activeTab === 'report' && (
+        {/* Tab 3: Chấm Điểm Thi Đua Phòng Ở (25 Phòng, 12 Nam & 13 Nữ) */}
+        {activeTab === 'competition' && allowedTabs.includes('competition') && (
+          <CompetitionScoringView
+            currentDate={currentDate}
+            currentUser={effectiveUser}
+            authorizedInfo={authorizedInfo}
+            roomsList={rooms}
+            students={students}
+            attendanceMap={attendanceMap}
+            roomSummaries={roomSummaries}
+            nightAttendanceMap={nightAttendanceMap}
+            nightRoomSummaries={nightRoomSummaries}
+            isAdmin={isAdmin}
+          />
+        )}
+
+        {/* Tab 4: Theo Dõi Và Điểm Danh Của Giáo Viên Trực Phòng (Nằm giữa Chấm điểm thi đua và Tổng hợp báo cáo & Xuất file) */}
+        {activeTab === 'room_duty' && allowedTabs.includes('room_duty') && (
+          <RoomDutyAttendanceView
+            currentDate={currentDate}
+            onDateChange={setCurrentDate}
+            students={students}
+            attendanceMap={attendanceMap}
+            onUpdateAttendance={handleUpdateAttendance}
+            rooms={rooms}
+            classes={classes}
+            villages={villages}
+            hamlets={hamlets}
+            currentUser={effectiveUser}
+            authorizedInfo={authorizedInfo}
+            roomSummaries={roomSummaries}
+            onSaveRoomSummary={handleSaveRoomSummary}
+            roomConfigs={roomConfigs}
+          />
+        )}
+
+        {/* Tab 5: Master Consolidated Report & Export */}
+        {activeTab === 'report' && allowedTabs.includes('report') && (
           <MasterReportView
             currentDate={currentDate}
             students={students}
@@ -582,23 +810,31 @@ export default function App() {
           />
         )}
 
-        {/* Tab 3: Student Registry Management */}
-        {activeTab === 'students' && (
+        {/* Tab 6: Student Registry Management */}
+        {activeTab === 'students' && allowedTabs.includes('students') && (
           <StudentManagementView
             students={students}
             onSaveStudent={handleSaveStudent}
             onDeleteStudent={handleDeleteStudent}
             onResetSeedData={handleResetSeedData}
+            onClearAllStudents={handleClearAllStudents}
+            onSaveBatchStudents={handleSaveBatchStudents}
+            roomConfigs={roomConfigs}
+            onSaveRoomConfig={handleSaveRoomConfig}
+            onDeleteRoomConfig={handleDeleteRoomConfig}
+            onDeleteMultipleRoomConfigs={handleDeleteMultipleRoomConfigs}
+            onResetRoomConfigs={handleResetRoomConfigs}
             rooms={rooms}
             classes={classes}
             villages={villages}
             hamlets={hamlets}
             canEdit={isUserAuthorized || guestMode || Boolean(authorizedInfo)}
+            isAdmin={isAdmin || guestMode}
           />
         )}
 
-        {/* Tab 4: Teacher Permissions Management */}
-        {activeTab === 'permissions' && (
+        {/* Tab 7: Teacher Permissions Management */}
+        {activeTab === 'permissions' && allowedTabs.includes('permissions') && (
           <PermissionsManagementView
             authorizedUsers={authorizedUsers}
             onSaveUser={handleSaveUser}
@@ -627,7 +863,7 @@ export default function App() {
               Hệ thống Quản lý Học sinh Nội trú • Trường PTDTBT THCS Trà Đốc - TP Đà Nẵng
             </span>
             <span className="text-[11px] text-slate-400">
-              Điểm danh hằng ngày • Báo suất ăn cuối tuần • Thống kê theo Phòng, Lớp, Thôn & Nóc
+              Điểm danh của GVCN • Báo suất ăn cuối tuần • Thống kê theo Phòng, Lớp, Thôn & Nóc
             </span>
           </div>
 

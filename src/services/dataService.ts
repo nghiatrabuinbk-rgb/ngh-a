@@ -9,8 +9,28 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Student, AttendanceRecord, RoomSummary, AuthorizedUser, NightStudyRecord, NightRoomSummary } from '../types';
-import { SEED_STUDENTS, INITIAL_ADMIN_EMAIL, DEFAULT_TEACHERS_LIST } from '../mockData';
+import { 
+  Student, 
+  AttendanceRecord, 
+  RoomSummary, 
+  AuthorizedUser, 
+  NightStudyRecord, 
+  NightRoomSummary, 
+  RoomConfig,
+  CompetitionCriterion,
+  CompetitionDepartment,
+  CompetitionRoomEvaluation,
+  CompetitionDeductionRules,
+  RoomCompetitionBonus
+} from '../types';
+import { 
+  SEED_STUDENTS, 
+  INITIAL_ADMIN_EMAIL, 
+  DEFAULT_TEACHERS_LIST, 
+  DEFAULT_ROOM_CONFIGS,
+  DEFAULT_COMPETITION_CRITERIA,
+  DEFAULT_COMPETITION_DEPARTMENTS
+} from '../mockData';
 
 const STUDENTS_COL = 'students';
 const ATTENDANCE_COL = 'attendance_records';
@@ -18,6 +38,12 @@ const ROOM_SUMMARIES_COL = 'room_summaries';
 const AUTHORIZED_USERS_COL = 'authorized_users';
 const NIGHT_ATTENDANCE_COL = 'night_study_attendance';
 const NIGHT_SUMMARIES_COL = 'night_room_summaries';
+const ROOM_CONFIGS_COL = 'room_configs';
+const COMPETITION_CRITERIA_COL = 'competition_criteria';
+const COMPETITION_DEPARTMENTS_COL = 'competition_departments';
+const COMPETITION_EVALUATIONS_COL = 'competition_evaluations';
+const COMPETITION_RULES_COL = 'competition_deduction_rules';
+const COMPETITION_BONUSES_COL = 'competition_room_bonuses';
 
 // In-memory / localStorage sync fallback in case network issues or offline
 const LOCAL_STORAGE_KEY_STUDENTS = 'qlnt_students_v1';
@@ -26,6 +52,47 @@ const LOCAL_STORAGE_KEY_SUMMARIES = 'qlnt_summaries_v1';
 const LOCAL_STORAGE_KEY_USERS = 'qlnt_users_v1';
 const LOCAL_STORAGE_KEY_NIGHT_ATTENDANCE = 'qlnt_night_attendance_v1';
 const LOCAL_STORAGE_KEY_NIGHT_SUMMARIES = 'qlnt_night_summaries_v1';
+const LOCAL_STORAGE_KEY_ROOMS = 'qlnt_room_configs_v1';
+const LOCAL_STORAGE_KEY_COMPETITION_CRITERIA = 'qlnt_competition_criteria_v1';
+const LOCAL_STORAGE_KEY_COMPETITION_DEPTS = 'qlnt_competition_departments_v1';
+const LOCAL_STORAGE_KEY_COMPETITION_EVALS = 'qlnt_competition_evaluations_v1';
+const LOCAL_STORAGE_KEY_COMPETITION_RULES = 'qlnt_competition_rules_v1';
+const LOCAL_STORAGE_KEY_COMPETITION_BONUSES = 'qlnt_competition_bonuses_v1';
+const LOCAL_STORAGE_FLAG_CLEARED = 'qlnt_students_cleared_flag';
+
+export const DEFAULT_COMPETITION_DEDUCTION_RULES: CompetitionDeductionRules = {
+  dayLeaveUnexcusedRate: 5,   // 1 HS vắng không phép trừ 5 điểm (2 HS = 10 điểm)
+  daySkippedClassRate: 5,     // 1 HS bỏ tiết trừ 5 điểm (2 HS = 10 điểm)
+  dayAteNoClassRate: 10,      // lên ăn không đi học trừ 10 điểm
+  nightLeaveUnexcusedRate: 5, // Tự học đêm vắng không phép trừ 5 điểm
+  maxBonusPointsLimit: 100,   // Quản trị viên tùy chọn định mức 100 điểm
+};
+
+// Bản đồ chuyển đổi số phòng khu Nữ từ 01..13 sang 13..25 theo yêu cầu người dùng
+export const OLD_FEMALE_ROOM_NAME_MAP: Record<string, string> = {
+  'Phòng Nữ 01': 'Phòng Nữ 13',
+  'Phòng Nữ 02': 'Phòng Nữ 14',
+  'Phòng Nữ 03': 'Phòng Nữ 15',
+  'Phòng Nữ 04': 'Phòng Nữ 16',
+  'Phòng Nữ 05': 'Phòng Nữ 17',
+  'Phòng Nữ 06': 'Phòng Nữ 18',
+  'Phòng Nữ 07': 'Phòng Nữ 19',
+  'Phòng Nữ 08': 'Phòng Nữ 20',
+  'Phòng Nữ 09': 'Phòng Nữ 21',
+  'Phòng Nữ 10': 'Phòng Nữ 22',
+  'Phòng Nữ 11': 'Phòng Nữ 23',
+  'Phòng Nữ 12': 'Phòng Nữ 24',
+  'Phòng Nữ 13': 'Phòng Nữ 25',
+  'Phòng Nữ 1': 'Phòng Nữ 13',
+  'Phòng Nữ 2': 'Phòng Nữ 14',
+  'Phòng Nữ 3': 'Phòng Nữ 15',
+  'Phòng Nữ 4': 'Phòng Nữ 16',
+  'Phòng Nữ 5': 'Phòng Nữ 17',
+  'Phòng Nữ 6': 'Phòng Nữ 18',
+  'Phòng Nữ 7': 'Phòng Nữ 19',
+  'Phòng Nữ 8': 'Phòng Nữ 20',
+  'Phòng Nữ 9': 'Phòng Nữ 21',
+};
 
 export async function fetchAuthorizedUsers(): Promise<AuthorizedUser[]> {
   try {
@@ -33,7 +100,11 @@ export async function fetchAuthorizedUsers(): Promise<AuthorizedUser[]> {
     const list: AuthorizedUser[] = [];
     snap.forEach(d => {
       const data = d.data() as AuthorizedUser;
-      list.push({ ...data, id: d.id });
+      const assigned = data.assignedRooms?.map(r => OLD_FEMALE_ROOM_NAME_MAP[r] || r) || [];
+      const modules = data.allowedModules && data.allowedModules.length > 0
+        ? data.allowedModules
+        : (data.role === 'admin' ? ['attendance', 'night_study', 'competition', 'room_duty'] : ['room_duty']);
+      list.push({ ...data, id: d.id, assignedRooms: assigned, allowedModules: modules as any });
     });
 
     if (list.length === 0) {
@@ -48,7 +119,14 @@ export async function fetchAuthorizedUsers(): Promise<AuthorizedUser[]> {
     console.warn('Falling back to local storage for users:', error);
     const local = localStorage.getItem(LOCAL_STORAGE_KEY_USERS);
     if (local) {
-      return JSON.parse(local);
+      const parsed: AuthorizedUser[] = JSON.parse(local);
+      return parsed.map(u => ({
+        ...u,
+        assignedRooms: u.assignedRooms?.map(r => OLD_FEMALE_ROOM_NAME_MAP[r] || r) || [],
+        allowedModules: u.allowedModules && u.allowedModules.length > 0
+          ? u.allowedModules
+          : (u.role === 'admin' ? ['attendance', 'night_study', 'competition', 'room_duty'] : ['room_duty']),
+      }));
     }
     return DEFAULT_TEACHERS_LIST;
   }
@@ -89,15 +167,25 @@ export async function deleteAuthorizedUser(email: string): Promise<void> {
 }
 
 export async function fetchStudents(): Promise<Student[]> {
+  const isCleared = localStorage.getItem(LOCAL_STORAGE_FLAG_CLEARED) === 'true';
   try {
     const snap = await getDocs(collection(db, STUDENTS_COL));
     const list: Student[] = [];
     snap.forEach(d => {
-      list.push({ ...(d.data() as Student), id: d.id });
+      const data = d.data() as Student;
+      let room = data.room;
+      if (OLD_FEMALE_ROOM_NAME_MAP[room]) {
+        room = OLD_FEMALE_ROOM_NAME_MAP[room];
+        setDoc(doc(db, STUDENTS_COL, d.id), { ...data, room }).catch(() => {});
+      }
+      list.push({ ...data, room, id: d.id });
     });
 
     if (list.length === 0) {
-      // Seed default students if empty
+      if (isCleared) {
+        return [];
+      }
+      // Seed default students if empty and not cleared
       const seeded: Student[] = [];
       for (let i = 0; i < SEED_STUDENTS.length; i++) {
         const item = SEED_STUDENTS[i];
@@ -114,13 +202,25 @@ export async function fetchStudents(): Promise<Student[]> {
       return seeded;
     }
 
+    // Has records in DB, so not cleared
+    localStorage.removeItem(LOCAL_STORAGE_FLAG_CLEARED);
     localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(list));
     return list;
   } catch (error) {
     console.warn('Fetch students error, using local/seed fallback:', error);
+    if (isCleared) {
+      const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
+      return local ? JSON.parse(local) : [];
+    }
     const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
     if (local) {
-      return JSON.parse(local);
+      const parsed: Student[] = JSON.parse(local);
+      const migrated = parsed.map(s => ({
+        ...s,
+        room: OLD_FEMALE_ROOM_NAME_MAP[s.room] || s.room,
+      }));
+      localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(migrated));
+      return migrated;
     }
     const seeded = SEED_STUDENTS.map((s, i) => ({
       ...s,
@@ -131,7 +231,64 @@ export async function fetchStudents(): Promise<Student[]> {
   }
 }
 
+export async function clearAllStudents(): Promise<void> {
+  localStorage.setItem(LOCAL_STORAGE_FLAG_CLEARED, 'true');
+  localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify([]));
+
+  try {
+    const snap = await getDocs(collection(db, STUDENTS_COL));
+    const deletePromises = snap.docs.map(docSnap => deleteDoc(doc(db, STUDENTS_COL, docSnap.id)));
+    await Promise.all(deletePromises);
+  } catch (error) {
+    console.warn('Clear all students from Firestore failed:', error);
+  }
+}
+
+export async function saveStudentsBatch(
+  newStudents: Student[],
+  replaceRoom?: string
+): Promise<Student[]> {
+  localStorage.removeItem(LOCAL_STORAGE_FLAG_CLEARED);
+
+  const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
+  let currentStudents: Student[] = local ? JSON.parse(local) : [];
+
+  if (replaceRoom) {
+    // Delete students of this room from Firestore and local
+    currentStudents = currentStudents.filter(s => s.room !== replaceRoom);
+    try {
+      const q = query(collection(db, STUDENTS_COL), where('room', '==', replaceRoom));
+      const snap = await getDocs(q);
+      const delPromises = snap.docs.map(d => deleteDoc(doc(db, STUDENTS_COL, d.id)));
+      await Promise.all(delPromises);
+    } catch (err) {
+      console.warn('Batch delete old room students failed:', err);
+    }
+  }
+
+  for (const s of newStudents) {
+    const idx = currentStudents.findIndex(item => item.id === s.id);
+    if (idx >= 0) {
+      currentStudents[idx] = s;
+    } else {
+      currentStudents.push(s);
+    }
+    try {
+      await setDoc(doc(db, STUDENTS_COL, s.id), {
+        ...s,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn('Batch save student failed for', s.id, e);
+    }
+  }
+
+  localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(currentStudents));
+  return currentStudents;
+}
+
 export async function saveStudent(student: Student): Promise<void> {
+  localStorage.removeItem(LOCAL_STORAGE_FLAG_CLEARED);
   try {
     await setDoc(doc(db, STUDENTS_COL, student.id), {
       ...student,
@@ -163,6 +320,158 @@ export async function deleteStudent(studentId: string): Promise<void> {
     list = list.filter(s => s.id !== studentId);
     localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(list));
   }
+}
+
+export async function fetchRoomConfigs(): Promise<RoomConfig[]> {
+  try {
+    const snap = await getDocs(collection(db, ROOM_CONFIGS_COL));
+    const list: RoomConfig[] = [];
+    snap.forEach(d => {
+      list.push({ ...(d.data() as RoomConfig), id: d.id });
+    });
+
+    if (list.length === 0) {
+      for (const r of DEFAULT_ROOM_CONFIGS) {
+        await setDoc(doc(db, ROOM_CONFIGS_COL, r.id), r);
+      }
+      localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(DEFAULT_ROOM_CONFIGS));
+      return DEFAULT_ROOM_CONFIGS;
+    }
+
+    // Check if migration from 01..13 to 13..25 is needed
+    const needsMigration = list.some(r => r.name === 'Phòng Nữ 01' || r.id === 'phong_nu_01' || (r.name.startsWith('Phòng Nữ 0')));
+    if (needsMigration) {
+      const migratedList: RoomConfig[] = [];
+      for (const r of list) {
+        if (OLD_FEMALE_ROOM_NAME_MAP[r.name]) {
+          const newName = OLD_FEMALE_ROOM_NAME_MAP[r.name];
+          const num = parseInt(newName.match(/\d+/)?.[0] || '13', 10);
+          const newId = `phong_nu_${num}`;
+          const updated: RoomConfig = {
+            ...r,
+            id: newId,
+            name: newName,
+            gender: 'Nữ',
+            order: num,
+          };
+          if (r.id !== newId) {
+            deleteDoc(doc(db, ROOM_CONFIGS_COL, r.id)).catch(() => {});
+          }
+          setDoc(doc(db, ROOM_CONFIGS_COL, newId), updated).catch(() => {});
+          migratedList.push(updated);
+        } else {
+          migratedList.push(r);
+        }
+      }
+      migratedList.sort((a, b) => (a.order || 0) - (b.order || 0));
+      localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(migratedList));
+      return migratedList;
+    }
+
+    list.sort((a, b) => (a.order || 0) - (b.order || 0));
+    localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(list));
+    return list;
+  } catch (error) {
+    console.warn('Fetch room configs fallback:', error);
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY_ROOMS);
+    if (local) {
+      let parsed: RoomConfig[] = JSON.parse(local);
+      const needsMigration = parsed.some(r => r.name === 'Phòng Nữ 01' || r.id === 'phong_nu_01' || (r.name.startsWith('Phòng Nữ 0')));
+      if (needsMigration) {
+        parsed = parsed.map(r => {
+          if (OLD_FEMALE_ROOM_NAME_MAP[r.name]) {
+            const newName = OLD_FEMALE_ROOM_NAME_MAP[r.name];
+            const num = parseInt(newName.match(/\d+/)?.[0] || '13', 10);
+            return {
+              ...r,
+              id: `phong_nu_${num}`,
+              name: newName,
+              gender: 'Nữ',
+              order: num,
+            };
+          }
+          return r;
+        });
+        parsed.sort((a, b) => (a.order || 0) - (b.order || 0));
+        localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(parsed));
+      }
+      return parsed;
+    }
+    return DEFAULT_ROOM_CONFIGS;
+  }
+}
+
+export async function saveRoomConfig(room: RoomConfig): Promise<void> {
+  try {
+    await setDoc(doc(db, ROOM_CONFIGS_COL, room.id), {
+      ...room,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn('Save room config Firestore error:', error);
+  }
+
+  const local = localStorage.getItem(LOCAL_STORAGE_KEY_ROOMS);
+  let list: RoomConfig[] = local ? JSON.parse(local) : [...DEFAULT_ROOM_CONFIGS];
+  const idx = list.findIndex(r => r.id === room.id);
+  if (idx >= 0) {
+    list[idx] = room;
+  } else {
+    list.push(room);
+  }
+  list.sort((a, b) => (a.order || 0) - (b.order || 0));
+  localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(list));
+}
+
+export async function deleteRoomConfig(roomId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, ROOM_CONFIGS_COL, roomId));
+  } catch (error) {
+    console.warn('Delete room config Firestore error:', error);
+  }
+
+  const local = localStorage.getItem(LOCAL_STORAGE_KEY_ROOMS);
+  if (local) {
+    let list: RoomConfig[] = JSON.parse(local);
+    list = list.filter(r => r.id !== roomId && r.name !== roomId);
+    localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(list));
+  }
+}
+
+export async function deleteMultipleRoomConfigs(roomIds: string[]): Promise<void> {
+  const promises = roomIds.map(async (id) => {
+    try {
+      await deleteDoc(doc(db, ROOM_CONFIGS_COL, id));
+    } catch (err) {
+      console.warn('Delete room config Firestore error:', err);
+    }
+  });
+  await Promise.all(promises);
+
+  const local = localStorage.getItem(LOCAL_STORAGE_KEY_ROOMS);
+  if (local) {
+    let list: RoomConfig[] = JSON.parse(local);
+    const idSet = new Set(roomIds);
+    list = list.filter(r => !idSet.has(r.id) && !idSet.has(r.name));
+    localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(list));
+  }
+}
+
+export async function resetRoomConfigs(): Promise<RoomConfig[]> {
+  try {
+    const snap = await getDocs(collection(db, ROOM_CONFIGS_COL));
+    const delPromises = snap.docs.map(d => deleteDoc(doc(db, ROOM_CONFIGS_COL, d.id)));
+    await Promise.all(delPromises);
+
+    for (const r of DEFAULT_ROOM_CONFIGS) {
+      await setDoc(doc(db, ROOM_CONFIGS_COL, r.id), r);
+    }
+  } catch (error) {
+    console.warn('Reset room configs Firestore error:', error);
+  }
+
+  localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(DEFAULT_ROOM_CONFIGS));
+  return DEFAULT_ROOM_CONFIGS;
 }
 
 export async function fetchAttendanceForDate(date: string): Promise<Record<string, AttendanceRecord>> {
@@ -451,4 +760,402 @@ export async function fetchNightAttendanceForDateRange(
   }
 
   return Object.values(recordsMap);
+}
+
+// ==========================================
+// CHẤM ĐIỂM THI ĐUA (COMPETITION SCORING SERVICES)
+// ==========================================
+
+export async function fetchCompetitionCriteria(): Promise<CompetitionCriterion[]> {
+  try {
+    const snap = await getDocs(collection(db, COMPETITION_CRITERIA_COL));
+    const list: CompetitionCriterion[] = [];
+    snap.forEach(d => {
+      list.push({ ...(d.data() as CompetitionCriterion), id: d.id });
+    });
+
+    if (list.length > 0) {
+      list.sort((a, b) => a.order - b.order);
+      localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_CRITERIA, JSON.stringify(list));
+      return list;
+    }
+  } catch (error) {
+    console.warn('Fetch competition criteria from Firestore failed, fallback to local:', error);
+  }
+
+  // Fallback to local storage or defaults
+  try {
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_CRITERIA);
+    if (local) {
+      const parsed: CompetitionCriterion[] = JSON.parse(local);
+      if (parsed.length > 0) {
+        return parsed.sort((a, b) => a.order - b.order);
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading local criteria:', e);
+  }
+
+  return DEFAULT_COMPETITION_CRITERIA.map(c => ({ ...c }));
+}
+
+export async function saveCompetitionCriterion(criterion: CompetitionCriterion): Promise<void> {
+  const docId = criterion.id;
+  try {
+    await setDoc(doc(db, COMPETITION_CRITERIA_COL, docId), {
+      ...criterion,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn('Save competition criterion to Firestore failed:', error);
+  }
+
+  // Update local storage
+  try {
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_CRITERIA);
+    let list: CompetitionCriterion[] = local ? JSON.parse(local) : [...DEFAULT_COMPETITION_CRITERIA];
+    const idx = list.findIndex(c => c.id === docId);
+    if (idx >= 0) {
+      list[idx] = criterion;
+    } else {
+      list.push(criterion);
+    }
+    localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_CRITERIA, JSON.stringify(list));
+  } catch (e) {
+    console.warn('Error saving criterion to localStorage:', e);
+  }
+}
+
+export async function deleteCompetitionCriterion(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, COMPETITION_CRITERIA_COL, id));
+  } catch (error) {
+    console.warn('Delete competition criterion from Firestore failed:', error);
+  }
+
+  try {
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_CRITERIA);
+    if (local) {
+      const list: CompetitionCriterion[] = JSON.parse(local);
+      const filtered = list.filter(c => c.id !== id);
+      localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_CRITERIA, JSON.stringify(filtered));
+    }
+  } catch (e) {
+    console.warn('Error deleting criterion from localStorage:', e);
+  }
+}
+
+export async function resetCompetitionCriteria(): Promise<CompetitionCriterion[]> {
+  try {
+    for (const c of DEFAULT_COMPETITION_CRITERIA) {
+      await setDoc(doc(db, COMPETITION_CRITERIA_COL, c.id), {
+        ...c,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  } catch (e) {
+    console.warn('Reset criteria to Firestore failed:', e);
+  }
+
+  const list = DEFAULT_COMPETITION_CRITERIA.map(c => ({ ...c }));
+  localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_CRITERIA, JSON.stringify(list));
+  return list;
+}
+
+export async function fetchCompetitionDepartments(): Promise<CompetitionDepartment[]> {
+  try {
+    const snap = await getDocs(collection(db, COMPETITION_DEPARTMENTS_COL));
+    const list: CompetitionDepartment[] = [];
+    snap.forEach(d => {
+      list.push({ ...(d.data() as CompetitionDepartment), id: d.id });
+    });
+
+    if (list.length > 0) {
+      list.sort((a, b) => a.order - b.order);
+      localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_DEPTS, JSON.stringify(list));
+      return list;
+    }
+  } catch (error) {
+    console.warn('Fetch competition departments from Firestore failed, fallback to local:', error);
+  }
+
+  // Fallback to local storage or defaults
+  try {
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_DEPTS);
+    if (local) {
+      const parsed: CompetitionDepartment[] = JSON.parse(local);
+      if (parsed.length > 0) {
+        return parsed.sort((a, b) => a.order - b.order);
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading local departments:', e);
+  }
+
+  return DEFAULT_COMPETITION_DEPARTMENTS.map(d => ({ ...d }));
+}
+
+export async function saveCompetitionDepartment(dept: CompetitionDepartment): Promise<void> {
+  const docId = dept.id;
+  try {
+    await setDoc(doc(db, COMPETITION_DEPARTMENTS_COL, docId), {
+      ...dept,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn('Save competition department to Firestore failed:', error);
+  }
+
+  // Update local storage
+  try {
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_DEPTS);
+    let list: CompetitionDepartment[] = local ? JSON.parse(local) : [...DEFAULT_COMPETITION_DEPARTMENTS];
+    const idx = list.findIndex(d => d.id === docId);
+    if (idx >= 0) {
+      list[idx] = dept;
+    } else {
+      list.push(dept);
+    }
+    localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_DEPTS, JSON.stringify(list));
+  } catch (e) {
+    console.warn('Error saving department to localStorage:', e);
+  }
+}
+
+export async function deleteCompetitionDepartment(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, COMPETITION_DEPARTMENTS_COL, id));
+  } catch (error) {
+    console.warn('Delete competition department from Firestore failed:', error);
+  }
+
+  try {
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_DEPTS);
+    if (local) {
+      const list: CompetitionDepartment[] = JSON.parse(local);
+      const filtered = list.filter(d => d.id !== id);
+      localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_DEPTS, JSON.stringify(filtered));
+    }
+  } catch (e) {
+    console.warn('Error deleting department from localStorage:', e);
+  }
+}
+
+export async function resetCompetitionDepartments(): Promise<CompetitionDepartment[]> {
+  try {
+    for (const d of DEFAULT_COMPETITION_DEPARTMENTS) {
+      await setDoc(doc(db, COMPETITION_DEPARTMENTS_COL, d.id), {
+        ...d,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  } catch (e) {
+    console.warn('Reset departments to Firestore failed:', e);
+  }
+
+  const list = DEFAULT_COMPETITION_DEPARTMENTS.map(d => ({ ...d }));
+  localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_DEPTS, JSON.stringify(list));
+  return list;
+}
+
+export async function fetchCompetitionEvaluations(): Promise<CompetitionRoomEvaluation[]> {
+  const results: Record<string, CompetitionRoomEvaluation> = {};
+
+  try {
+    const snap = await getDocs(collection(db, COMPETITION_EVALUATIONS_COL));
+    snap.forEach(d => {
+      const data = d.data() as CompetitionRoomEvaluation;
+      results[d.id] = { ...data, id: d.id };
+    });
+  } catch (error) {
+    console.warn('Fetch competition evaluations from Firestore failed:', error);
+  }
+
+  // Merge with localStorage
+  try {
+    const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_EVALS);
+    if (localStr) {
+      const localMap: Record<string, CompetitionRoomEvaluation> = JSON.parse(localStr);
+      Object.keys(localMap).forEach(key => {
+        if (!results[key]) {
+          results[key] = localMap[key];
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Error reading local evaluations:', e);
+  }
+
+  return Object.values(results);
+}
+
+export async function saveCompetitionEvaluation(evaluation: CompetitionRoomEvaluation): Promise<void> {
+  const docId = evaluation.id || `${evaluation.date}_${evaluation.roomId.replace(/\s+/g, '_')}_${evaluation.evaluatorEmail.replace(/[@.]/g, '_')}`;
+  const dataToSave: CompetitionRoomEvaluation = {
+    ...evaluation,
+    id: docId,
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    await setDoc(doc(db, COMPETITION_EVALUATIONS_COL, docId), dataToSave);
+  } catch (error) {
+    console.warn('Save evaluation to Firestore failed, saving local:', error);
+  }
+
+  // Always sync to local storage
+  try {
+    const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_EVALS);
+    const localMap: Record<string, CompetitionRoomEvaluation> = localStr ? JSON.parse(localStr) : {};
+    localMap[docId] = dataToSave;
+    localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_EVALS, JSON.stringify(localMap));
+  } catch (e) {
+    console.warn('Error saving evaluation to localStorage:', e);
+  }
+}
+
+export async function deleteCompetitionEvaluation(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, COMPETITION_EVALUATIONS_COL, id));
+  } catch (error) {
+    console.warn('Delete evaluation from Firestore failed:', error);
+  }
+
+  try {
+    const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_EVALS);
+    if (localStr) {
+      const localMap: Record<string, CompetitionRoomEvaluation> = JSON.parse(localStr);
+      delete localMap[id];
+      localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_EVALS, JSON.stringify(localMap));
+    }
+  } catch (e) {
+    console.warn('Error deleting evaluation from localStorage:', e);
+  }
+}
+
+// ==========================================
+// QUY TẮC TRỪ ĐIỂM CHUYÊN CẦN & ĐIỂM CỘNG THI ĐUA
+// ==========================================
+
+export async function fetchCompetitionDeductionRules(): Promise<CompetitionDeductionRules> {
+  try {
+    const snap = await getDoc(doc(db, COMPETITION_RULES_COL, 'current_rules'));
+    if (snap.exists()) {
+      const data = snap.data() as CompetitionDeductionRules;
+      localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_RULES, JSON.stringify(data));
+      return data;
+    }
+  } catch (err) {
+    console.warn('Fetch competition deduction rules from Firestore failed, fallback to local:', err);
+  }
+
+  try {
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_RULES);
+    if (local) {
+      return JSON.parse(local);
+    }
+  } catch (e) {
+    console.warn('Error reading local competition deduction rules:', e);
+  }
+
+  return { ...DEFAULT_COMPETITION_DEDUCTION_RULES };
+}
+
+export async function saveCompetitionDeductionRules(rules: CompetitionDeductionRules): Promise<void> {
+  try {
+    await setDoc(doc(db, COMPETITION_RULES_COL, 'current_rules'), {
+      ...rules,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('Save competition rules to Firestore failed:', err);
+  }
+
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_RULES, JSON.stringify(rules));
+  } catch (e) {
+    console.warn('Error saving competition rules to localStorage:', e);
+  }
+}
+
+export async function fetchRoomCompetitionBonuses(dateOrWeek: string): Promise<Record<string, RoomCompetitionBonus>> {
+  const result: Record<string, RoomCompetitionBonus> = {};
+
+  try {
+    const q = query(collection(db, COMPETITION_BONUSES_COL), where('dateOrWeek', '==', dateOrWeek));
+    const snap = await getDocs(q);
+    snap.forEach((d) => {
+      const data = d.data() as RoomCompetitionBonus;
+      result[data.roomId] = { ...data, id: d.id };
+    });
+  } catch (err) {
+    console.warn('Fetch room competition bonuses from Firestore failed:', err);
+  }
+
+  try {
+    const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_BONUSES);
+    if (localStr) {
+      const allLocal: Record<string, Record<string, RoomCompetitionBonus>> = JSON.parse(localStr);
+      const periodBonuses = allLocal[dateOrWeek] || {};
+      Object.keys(periodBonuses).forEach((roomId) => {
+        if (!result[roomId]) {
+          result[roomId] = periodBonuses[roomId];
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Error reading local competition bonuses:', e);
+  }
+
+  return result;
+}
+
+export async function saveRoomCompetitionBonus(bonus: RoomCompetitionBonus): Promise<void> {
+  const docId = `${bonus.dateOrWeek}_${bonus.roomId.replace(/\s+/g, '_')}`;
+  const dataToSave: RoomCompetitionBonus = {
+    ...bonus,
+    id: docId,
+    awardedAt: bonus.awardedAt || new Date().toISOString(),
+  };
+
+  try {
+    await setDoc(doc(db, COMPETITION_BONUSES_COL, docId), dataToSave);
+  } catch (err) {
+    console.warn('Save room bonus to Firestore failed:', err);
+  }
+
+  try {
+    const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_BONUSES);
+    const allLocal: Record<string, Record<string, RoomCompetitionBonus>> = localStr ? JSON.parse(localStr) : {};
+    if (!allLocal[bonus.dateOrWeek]) {
+      allLocal[bonus.dateOrWeek] = {};
+    }
+    allLocal[bonus.dateOrWeek][bonus.roomId] = dataToSave;
+    localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_BONUSES, JSON.stringify(allLocal));
+  } catch (e) {
+    console.warn('Error saving room bonus to localStorage:', e);
+  }
+}
+
+export async function deleteRoomCompetitionBonus(roomId: string, dateOrWeek: string): Promise<void> {
+  const docId = `${dateOrWeek}_${roomId.replace(/\s+/g, '_')}`;
+
+  try {
+    await deleteDoc(doc(db, COMPETITION_BONUSES_COL, docId));
+  } catch (err) {
+    console.warn('Delete room bonus from Firestore failed:', err);
+  }
+
+  try {
+    const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_COMPETITION_BONUSES);
+    if (localStr) {
+      const allLocal: Record<string, Record<string, RoomCompetitionBonus>> = JSON.parse(localStr);
+      if (allLocal[dateOrWeek]) {
+        delete allLocal[dateOrWeek][roomId];
+        localStorage.setItem(LOCAL_STORAGE_KEY_COMPETITION_BONUSES, JSON.stringify(allLocal));
+      }
+    }
+  } catch (e) {
+    console.warn('Error deleting room bonus from localStorage:', e);
+  }
 }

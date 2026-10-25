@@ -706,31 +706,21 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
 
                           {/* Student Permanent Note (from admin assignment) */}
                           {student.notes && (
-                            <div className="text-[11px] text-slate-500 mt-0.5 italic">
-                              Ghi chú hồ sơ: {student.notes}
+                            <div className="text-[11px] text-slate-500 mt-1 italic flex items-center gap-1">
+                              <span className="font-semibold text-slate-600">Ghi chú hồ sơ:</span>
+                              <span>{student.notes}</span>
                             </div>
                           )}
-
-                          {/* Inline Night Note for duty teacher */}
-                          <div className="mt-2 flex items-center gap-2">
-                            <span className="text-[11px] text-slate-500 shrink-0">Ghi chú học đêm:</span>
-                            <input
-                              type="text"
-                              value={record.note}
-                              onChange={(e) => handleNoteChange(student.id, e.target.value)}
-                              placeholder="Ví dụ: Đau đầu nghỉ phòng y tế, học chăm..."
-                              className="bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-lg px-2.5 py-1 text-xs w-full max-w-md focus:outline-none"
-                            />
-                          </div>
                         </div>
                       </div>
 
-                      {/* 3 Status Action Buttons */}
-                      <div className="flex items-center flex-wrap gap-1.5 shrink-0 self-end md:self-center">
+                      {/* 3 Status Action Buttons + Ô Ghi Chú Bên Cạnh Ô Vắng Không Phép */}
+                      <div className="flex flex-wrap items-center gap-2 shrink-0 self-stretch md:self-center">
                         {/* Status 1: Có mặt học đêm */}
                         <button
+                          type="button"
                           onClick={() => handleStatusChange(student.id, 'present_night')}
-                          className={`text-xs px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 border ${
+                          className={`text-xs px-3 py-2 rounded-xl font-bold transition flex items-center gap-1.5 border cursor-pointer ${
                             isPresent
                               ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-400'
                               : 'bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 border-slate-200'
@@ -742,8 +732,9 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
 
                         {/* Status 2: Vắng có phép */}
                         <button
+                          type="button"
                           onClick={() => handleStatusChange(student.id, 'absent_excused_night')}
-                          className={`text-xs px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 border ${
+                          className={`text-xs px-3 py-2 rounded-xl font-bold transition flex items-center gap-1.5 border cursor-pointer ${
                             isExcused
                               ? 'bg-blue-600 text-white border-blue-700 shadow-sm ring-2 ring-blue-400'
                               : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-800 border-slate-200'
@@ -755,8 +746,9 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
 
                         {/* Status 3: Vắng không phép */}
                         <button
+                          type="button"
                           onClick={() => handleStatusChange(student.id, 'absent_unexcused_night')}
-                          className={`text-xs px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 border ${
+                          className={`text-xs px-3 py-2 rounded-xl font-bold transition flex items-center gap-1.5 border cursor-pointer ${
                             isUnexcused
                               ? 'bg-rose-600 text-white border-rose-700 shadow-sm ring-2 ring-rose-400'
                               : 'bg-slate-100 text-slate-700 hover:bg-rose-50 hover:text-rose-800 border-slate-200'
@@ -765,6 +757,24 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
                           <XCircle className="w-3.5 h-3.5" />
                           <span>Vắng không phép</span>
                         </button>
+
+                        {/* Ô Ghi Chú Bên Cạnh Ô Vắng Không Phép (Theo yêu cầu người dùng) */}
+                        <div className="relative flex-1 min-w-[200px] sm:min-w-[260px] md:w-64 lg:w-72">
+                          <input
+                            type="text"
+                            value={record.note}
+                            onChange={(e) => handleNoteChange(student.id, e.target.value)}
+                            placeholder="Ghi chú (lý do vắng, vi phạm...)"
+                            title={`Ghi chú học đêm cho học sinh ${student.name}`}
+                            className={`w-full text-xs px-3 py-2 rounded-xl border transition focus:outline-none focus:ring-2 ${
+                              isUnexcused
+                                ? 'border-rose-400 bg-rose-50/70 text-rose-950 placeholder-rose-400 focus:ring-rose-400 focus:border-rose-500 shadow-xs'
+                                : isExcused
+                                ? 'border-blue-400 bg-blue-50/70 text-blue-950 placeholder-blue-400 focus:ring-blue-400 focus:border-blue-500 shadow-xs'
+                                : 'border-slate-300 bg-slate-50/70 text-slate-800 placeholder-slate-400 hover:bg-white focus:bg-white focus:ring-indigo-500 focus:border-indigo-500'
+                            }`}
+                          />
+                        </div>
                       </div>
                     </div>
                   );

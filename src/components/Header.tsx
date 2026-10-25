@@ -11,7 +11,9 @@ import {
   ClipboardCheck,
   Sparkles,
   QrCode,
-  Moon
+  Moon,
+  Trophy,
+  BedDouble
 } from 'lucide-react';
 import { AuthorizedUser } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -21,11 +23,13 @@ interface HeaderProps {
   onDateChange: (newDate: string) => void;
   currentUser: { email?: string | null; displayName?: string | null } | null;
   authorizedInfo: AuthorizedUser | null;
+  isAdmin?: boolean;
+  allowedTabs?: ('attendance' | 'night_study' | 'competition' | 'room_duty' | 'report' | 'students' | 'permissions')[];
   onLogin: () => void;
   onOpenZaloLogin: () => void;
   onLogout: () => void;
-  activeTab: 'attendance' | 'night_study' | 'report' | 'students' | 'permissions';
-  onTabChange: (tab: 'attendance' | 'night_study' | 'report' | 'students' | 'permissions') => void;
+  activeTab: 'attendance' | 'night_study' | 'competition' | 'room_duty' | 'report' | 'students' | 'permissions';
+  onTabChange: (tab: 'attendance' | 'night_study' | 'competition' | 'room_duty' | 'report' | 'students' | 'permissions') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,6 +37,8 @@ export const Header: React.FC<HeaderProps> = ({
   onDateChange,
   currentUser,
   authorizedInfo,
+  isAdmin = false,
+  allowedTabs = ['attendance', 'night_study', 'competition', 'room_duty', 'report', 'students', 'permissions'],
   onLogin,
   onOpenZaloLogin,
   onLogout,
@@ -136,67 +142,109 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Navigation Tabs */}
       <div className="max-w-7xl mx-auto px-4 flex items-center overflow-x-auto gap-1 py-1.5 text-sm">
-        <button
-          onClick={() => onTabChange('attendance')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition whitespace-nowrap ${
-            activeTab === 'attendance'
-              ? 'bg-white text-emerald-900 shadow-md font-semibold'
-              : 'text-emerald-100 hover:bg-emerald-700/60'
-          }`}
-        >
-          <ClipboardCheck className="w-4 h-4" />
-          <span>Điểm danh hằng ngày</span>
-        </button>
+        {allowedTabs.includes('attendance') && (
+          <button
+            onClick={() => onTabChange('attendance')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition whitespace-nowrap ${
+              activeTab === 'attendance'
+                ? 'bg-white text-emerald-900 shadow-md font-semibold'
+                : 'text-emerald-100 hover:bg-emerald-700/60'
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4" />
+            <span>Điểm danh của GVCN</span>
+          </button>
+        )}
 
         {/* Dedicated Independent Night Study Attendance Tab */}
-        <button
-          onClick={() => onTabChange('night_study')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold transition whitespace-nowrap ${
-            activeTab === 'night_study'
-              ? 'bg-amber-400 text-slate-950 shadow-md font-extrabold'
-              : 'text-amber-200 hover:bg-emerald-700/60'
-          }`}
-          title="Trạng thái điểm danh giáo viên trực tự học đêm (độc lập, quản lý 25 phòng)"
-        >
-          <Moon className="w-4 h-4 text-amber-300" />
-          <span>Điểm danh tự học đêm</span>
-        </button>
+        {allowedTabs.includes('night_study') && (
+          <button
+            onClick={() => onTabChange('night_study')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold transition whitespace-nowrap ${
+              activeTab === 'night_study'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-extrabold'
+                : 'text-amber-200 hover:bg-emerald-700/60'
+            }`}
+            title="Trạng thái điểm danh giáo viên trực tự học đêm (độc lập, quản lý 25 phòng)"
+          >
+            <Moon className="w-4 h-4 text-amber-300" />
+            <span>Điểm danh tự học đêm</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => onTabChange('report')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition whitespace-nowrap ${
-            activeTab === 'report'
-              ? 'bg-white text-emerald-900 shadow-md font-semibold'
-              : 'text-emerald-100 hover:bg-emerald-700/60'
-          }`}
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          <span>Tổng hợp báo cáo & Xuất file</span>
-        </button>
+        {/* Chấm điểm thi đua */}
+        {allowedTabs.includes('competition') && (
+          <button
+            onClick={() => onTabChange('competition')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold transition whitespace-nowrap ${
+              activeTab === 'competition'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-extrabold'
+                : 'text-amber-200 hover:bg-emerald-700/60'
+            }`}
+            title="Chấm điểm thi đua 25 phòng (12 phòng nam, 13 phòng nữ)"
+          >
+            <Trophy className="w-4 h-4 text-amber-300" />
+            <span>Chấm điểm thi đua</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => onTabChange('students')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition whitespace-nowrap ${
-            activeTab === 'students'
-              ? 'bg-white text-emerald-900 shadow-md font-semibold'
-              : 'text-emerald-100 hover:bg-emerald-700/60'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Danh sách học sinh nội trú</span>
-        </button>
+        {/* Theo dõi và điểm danh của giáo viên trực phòng (Nằm giữa Chấm điểm thi đua và Tổng hợp báo cáo & Xuất file) */}
+        {allowedTabs.includes('room_duty') && (
+          <button
+            onClick={() => onTabChange('room_duty')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold transition whitespace-nowrap ${
+              activeTab === 'room_duty'
+                ? 'bg-white text-emerald-950 shadow-md font-extrabold'
+                : 'text-emerald-100 hover:bg-emerald-700/60'
+            }`}
+            title="Theo dõi và điểm danh của giáo viên trực phòng (25 phòng: 12 nam, 13 nữ)"
+          >
+            <BedDouble className="w-4 h-4 text-emerald-300" />
+            <span>Theo dõi và điểm danh của giáo viên trực phòng</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => onTabChange('permissions')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition whitespace-nowrap ${
-            activeTab === 'permissions'
-              ? 'bg-white text-emerald-900 shadow-md font-semibold'
-              : 'text-emerald-100 hover:bg-emerald-700/60'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>Phân quyền GV trực phòng</span>
-        </button>
+        {allowedTabs.includes('report') && (
+          <button
+            onClick={() => onTabChange('report')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition whitespace-nowrap ${
+              activeTab === 'report'
+                ? 'bg-white text-emerald-900 shadow-md font-semibold'
+                : 'text-emerald-100 hover:bg-emerald-700/60'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Tổng hợp báo cáo & Xuất file</span>
+          </button>
+        )}
+
+        {allowedTabs.includes('students') && (
+          <button
+            onClick={() => onTabChange('students')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition whitespace-nowrap ${
+              activeTab === 'students'
+                ? 'bg-white text-emerald-900 shadow-md font-semibold'
+                : 'text-emerald-100 hover:bg-emerald-700/60'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Danh sách học sinh nội trú</span>
+          </button>
+        )}
+
+        {allowedTabs.includes('permissions') && (
+          <button
+            onClick={() => onTabChange('permissions')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition whitespace-nowrap ${
+              activeTab === 'permissions'
+                ? 'bg-white text-emerald-900 shadow-md font-semibold'
+                : 'text-emerald-100 hover:bg-emerald-700/60'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Phân quyền GV trực phòng</span>
+          </button>
+        )}
       </div>
     </header>
   );

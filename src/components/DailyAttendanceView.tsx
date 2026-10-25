@@ -142,6 +142,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
       studentId: student.id,
       studentName: student.name,
       room: student.room,
+      bedNumber: student.bedNumber || existing?.bedNumber || '',
       class: student.class,
       village: student.village,
       hamlet: student.hamlet,
@@ -169,6 +170,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
       studentId: student.id,
       studentName: student.name,
       room: student.room,
+      bedNumber: student.bedNumber || existing?.bedNumber || '',
       class: student.class,
       village: student.village,
       hamlet: student.hamlet,
@@ -195,6 +197,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
       studentId: student.id,
       studentName: student.name,
       room: student.room,
+      bedNumber: student.bedNumber || existing?.bedNumber || '',
       class: student.class,
       village: student.village,
       hamlet: student.hamlet,
@@ -223,6 +226,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
         studentId: s.id,
         studentName: s.name,
         room: s.room,
+        bedNumber: s.bedNumber || existing?.bedNumber || '',
         class: s.class,
         village: s.village,
         hamlet: s.hamlet,
@@ -250,6 +254,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
         studentId: s.id,
         studentName: s.name,
         room: s.room,
+        bedNumber: s.bedNumber || existing?.bedNumber || '',
         class: s.class,
         village: s.village,
         hamlet: s.hamlet,
@@ -301,6 +306,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
           studentId: s.id,
           studentName: s.name,
           room: s.room,
+          bedNumber: s.bedNumber || '',
           class: s.class,
           village: s.village,
           hamlet: s.hamlet,
@@ -323,6 +329,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
         if (roomStudents.length === 0) continue;
 
         let present = 0;
+        let skippedClass = 0;
         let ateNoClass = 0;
         let notAtSchool = 0;
         let leaveExcused = 0;
@@ -333,6 +340,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
           const rec = draftAttendance[s.id];
           const st = rec?.status || 'present';
           if (st === 'present') present++;
+          else if (st === 'skipped_class') skippedClass++;
           else if (st === 'ate_no_class') ateNoClass++;
           else if (st === 'not_at_school_this_week') notAtSchool++;
           else if (st === 'leave_excused') leaveExcused++;
@@ -349,6 +357,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
           teacherName: authorizedInfo?.name || currentUser?.displayName || 'Giáo viên trực',
           totalStudents: roomStudents.length,
           presentCount: present,
+          skippedClassCount: skippedClass,
           ateNoClassCount: ateNoClass,
           notAtSchoolThisWeekCount: notAtSchool,
           leaveExcusedCount: leaveExcused,
@@ -629,6 +638,8 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                 className={`bg-white rounded-xl p-3.5 border transition shadow-sm hover:shadow ${
                   currentStatus === 'present'
                     ? 'border-slate-200'
+                    : currentStatus === 'skipped_class'
+                    ? 'border-orange-400 bg-orange-50/20 ring-1 ring-orange-300'
                     : currentStatus === 'ate_no_class'
                     ? 'border-amber-400 bg-amber-50/20 ring-1 ring-amber-300'
                     : currentStatus === 'leave_unexcused'
@@ -655,6 +666,12 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                         <span className="text-[11px] font-medium bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
                           {student.room}
                         </span>
+                        {student.bedNumber && (
+                          <span className="text-[11px] font-bold bg-amber-100 text-amber-950 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1 shadow-2xs">
+                            <BedDouble className="w-3 h-3 text-amber-700" />
+                            <span>{student.bedNumber}</span>
+                          </span>
+                        )}
                         {student.gender && (
                           <span className="text-[11px] text-slate-500">
                             ({student.gender})
@@ -674,7 +691,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                         )}
                       </div>
 
-                      {/* Location: Thôn & Nóc */}
+                      {/* Location & Permanent Profile Note */}
                       <div className="flex items-center flex-wrap gap-2 text-xs text-slate-500 mt-1">
                         <span className="flex items-center gap-1 text-slate-600">
                           <MapPin className="w-3 h-3 text-slate-400" />
@@ -697,16 +714,24 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                             </a>
                           </>
                         )}
+                        {student.notes && (
+                          <>
+                            <span>•</span>
+                            <span className="text-[11px] text-slate-600 italic bg-amber-50/60 border border-amber-200/60 px-1.5 py-0.5 rounded" title={`Hồ sơ: ${student.notes}`}>
+                              Hồ sơ: {student.notes}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Attendance & Weekend Meal Action Buttons */}
-                  <div className="flex items-center flex-wrap gap-1.5">
+                  {/* Attendance & Weekend Meal Action Buttons + Ô Ghi Chú Bên Cạnh Báo Ăn Cuối Tuần */}
+                  <div className="flex items-center flex-wrap gap-1.5 self-stretch lg:self-center">
                     {/* Status 1: Có mặt */}
                     <button
                       onClick={() => handleStatusChange(student, 'present')}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
                         currentStatus === 'present'
                           ? 'bg-emerald-600 text-white font-bold shadow-sm ring-2 ring-emerald-600/40'
                           : 'bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800'
@@ -715,10 +740,23 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                       ✓ Có mặt
                     </button>
 
-                    {/* Status 2: Ăn không học */}
+                    {/* Status 2: HS Bỏ tiết */}
+                    <button
+                      onClick={() => handleStatusChange(student, 'skipped_class')}
+                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
+                        currentStatus === 'skipped_class'
+                          ? 'bg-orange-600 text-white font-bold shadow-sm ring-2 ring-orange-600/40'
+                          : 'bg-slate-100 hover:bg-orange-100 text-slate-700 hover:text-orange-950'
+                      }`}
+                      title="Học sinh tự ý bỏ tiết học trên lớp (bỏ 1 hoặc nhiều tiết trong các buổi học)"
+                    >
+                      🚫 HS Bỏ tiết
+                    </button>
+
+                    {/* Status 3: Ăn không học */}
                     <button
                       onClick={() => handleStatusChange(student, 'ate_no_class')}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
                         currentStatus === 'ate_no_class'
                           ? 'bg-amber-500 text-white font-bold shadow-sm ring-2 ring-amber-500/40'
                           : 'bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900'
@@ -731,7 +769,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                     {/* Status 3: Chưa lên trường trong tuần */}
                     <button
                       onClick={() => handleStatusChange(student, 'not_at_school_this_week')}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
                         currentStatus === 'not_at_school_this_week'
                           ? 'bg-purple-600 text-white font-bold shadow-sm ring-2 ring-purple-600/40'
                           : 'bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-800'
@@ -744,7 +782,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                     {/* Status 4: Nghỉ có phép */}
                     <button
                       onClick={() => handleStatusChange(student, 'leave_excused')}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
                         currentStatus === 'leave_excused'
                           ? 'bg-blue-600 text-white font-bold shadow-sm ring-2 ring-blue-600/40'
                           : 'bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-800'
@@ -756,7 +794,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                     {/* Status 5: Nghỉ không phép */}
                     <button
                       onClick={() => handleStatusChange(student, 'leave_unexcused')}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 ${
                         currentStatus === 'leave_unexcused'
                           ? 'bg-rose-600 text-white font-bold shadow-sm ring-2 ring-rose-600/40'
                           : 'bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-800'
@@ -768,7 +806,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                     {/* Status 6: Ở lại cuối tuần & Báo suất ăn */}
                     <button
                       onClick={() => handleToggleStayWeekend(student)}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 border ${
+                      className={`text-xs px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 border shrink-0 ${
                         record?.stayWeekend
                           ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-sm ring-2 ring-teal-400 border-teal-500'
                           : 'bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-900 border-slate-200'
@@ -778,22 +816,44 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                       <UtensilsCrossed className={`w-3.5 h-3.5 ${record?.stayWeekend ? 'text-white' : 'text-teal-600'}`} />
                       <span>{record?.stayWeekend ? '✓ Báo suất ăn T7-CN' : 'Báo ăn cuối tuần'}</span>
                     </button>
+
+                    {/* Ô Ghi Chú Bên Cạnh Báo Ăn Cuối Tuần (Theo yêu cầu người dùng cho tất cả học sinh các phòng) */}
+                    <div className="relative min-w-[200px] sm:min-w-[240px] md:w-60 lg:w-72 flex-1">
+                      <input
+                        type="text"
+                        value={note}
+                        onChange={(e) => handleNoteChange(student, e.target.value)}
+                        placeholder="Ghi chú báo ăn / lý do..."
+                        title={`Ghi chú cho học sinh ${student.name} (báo ăn cuối tuần, lý do...)`}
+                        className={`w-full text-xs pl-3 pr-7 py-1.5 rounded-lg border transition focus:outline-none focus:ring-2 ${
+                          record?.stayWeekend
+                            ? 'border-teal-400 bg-teal-50/70 text-teal-950 placeholder-teal-500 focus:ring-teal-400 focus:border-teal-500 shadow-2xs font-medium'
+                            : currentStatus === 'skipped_class'
+                            ? 'border-orange-400 bg-orange-50/70 text-orange-950 placeholder-orange-400 focus:ring-orange-400 focus:border-orange-500 shadow-2xs'
+                            : currentStatus === 'leave_unexcused'
+                            ? 'border-rose-400 bg-rose-50/70 text-rose-950 placeholder-rose-400 focus:ring-rose-400 focus:border-rose-500 shadow-2xs'
+                            : currentStatus === 'leave_excused'
+                            ? 'border-blue-400 bg-blue-50/70 text-blue-950 placeholder-blue-400 focus:ring-blue-400 focus:border-blue-500 shadow-2xs'
+                            : currentStatus === 'ate_no_class'
+                            ? 'border-amber-400 bg-amber-50/70 text-amber-950 placeholder-amber-400 focus:ring-amber-400 focus:border-amber-500 shadow-2xs'
+                            : currentStatus === 'not_at_school_this_week'
+                            ? 'border-purple-400 bg-purple-50/70 text-purple-950 placeholder-purple-400 focus:ring-purple-400 focus:border-purple-500 shadow-2xs'
+                            : 'border-slate-300 bg-slate-50/70 text-slate-800 placeholder-slate-400 hover:bg-white focus:bg-white focus:ring-emerald-500 focus:border-emerald-500'
+                        }`}
+                      />
+                      {note && (
+                        <button
+                          type="button"
+                          onClick={() => handleNoteChange(student, '')}
+                          title="Xóa nhanh ghi chú"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer transition"
+                        >
+                          <span className="text-xs font-bold leading-none block">✕</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-
-                {/* Optional Note Row if not present, or if teacher typed a note */}
-                {(currentStatus !== 'present' || note.trim().length > 0) && (
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center gap-2">
-                    <span className="text-xs font-medium text-slate-500 shrink-0">Lý do / Ghi chú:</span>
-                    <input
-                      type="text"
-                      placeholder="Nhập lý do vắng / ăn không học / ghi chú của giáo viên trực..."
-                      value={note}
-                      onChange={(e) => handleNoteChange(student, e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                )}
               </div>
             );
           })

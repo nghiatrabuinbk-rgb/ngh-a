@@ -25,7 +25,8 @@ import {
   CheckCheck,
   Loader2,
   XCircle,
-  HelpCircle
+  HelpCircle,
+  Ban
 } from 'lucide-react';
 import { 
   Student, 
@@ -55,7 +56,7 @@ interface MasterReportViewProps {
 }
 
 type PeriodType = 'day' | 'week' | 'month';
-type ListCategory = 'all' | 'present' | 'ate_no_class' | 'leave_excused' | 'leave_unexcused' | 'stay_weekend';
+type ListCategory = 'all' | 'present' | 'skipped_class' | 'ate_no_class' | 'leave_excused' | 'leave_unexcused' | 'stay_weekend';
 
 // Helper: Calculate week start (Monday) and end (Sunday)
 function getWeekRange(dateStr: string) {
@@ -308,6 +309,10 @@ export const MasterReportView: React.FC<MasterReportViewProps> = ({
     () => periodicDetailedItems.filter((i) => i.status === 'present'),
     [periodicDetailedItems]
   );
+  const skippedClassList = useMemo(
+    () => periodicDetailedItems.filter((i) => i.status === 'skipped_class'),
+    [periodicDetailedItems]
+  );
   const ateNoClassList = useMemo(
     () => periodicDetailedItems.filter((i) => i.status === 'ate_no_class'),
     [periodicDetailedItems]
@@ -332,6 +337,8 @@ export const MasterReportView: React.FC<MasterReportViewProps> = ({
     // Filter by category
     if (selectedCategory === 'present') {
       items = presentList;
+    } else if (selectedCategory === 'skipped_class') {
+      items = skippedClassList;
     } else if (selectedCategory === 'ate_no_class') {
       items = ateNoClassList;
     } else if (selectedCategory === 'leave_excused') {
@@ -597,6 +604,13 @@ export const MasterReportView: React.FC<MasterReportViewProps> = ({
         periodLabel: currentPeriodInfo.label,
         list: presentList,
         categoryType: 'present',
+      });
+    } else if (selectedCategory === 'skipped_class') {
+      exportSingleListToExcel({
+        title: `Danh Sách Học Sinh Bỏ Tiết Toàn Trường`,
+        periodLabel: currentPeriodInfo.label,
+        list: skippedClassList,
+        categoryType: 'skipped_class',
       });
     } else if (selectedCategory === 'ate_no_class') {
       exportSingleListToExcel({
@@ -912,8 +926,8 @@ export const MasterReportView: React.FC<MasterReportViewProps> = ({
             </div>
           </div>
 
-          {/* 2. KPI Summary Cards for the 5 requested categories */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          {/* 2. KPI Summary Cards for the requested categories */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             {/* Card 1: Có mặt */}
             <div
               onClick={() => setSelectedCategory('present')}
@@ -936,7 +950,29 @@ export const MasterReportView: React.FC<MasterReportViewProps> = ({
               <div className="text-[11px] text-slate-500 mt-0.5">Học sinh toàn trường</div>
             </div>
 
-            {/* Card 2: Ăn không học */}
+            {/* Card 2: HS Bỏ tiết */}
+            <div
+              onClick={() => setSelectedCategory('skipped_class')}
+              className={`p-3.5 sm:p-4 rounded-2xl border transition cursor-pointer shadow-xs ${
+                selectedCategory === 'skipped_class'
+                  ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-400'
+                  : 'bg-white border-slate-200 hover:border-orange-300'
+              }`}
+            >
+              <div className="flex items-center justify-between text-xs text-orange-900 font-bold mb-1">
+                <span className="flex items-center gap-1">
+                  <Ban className="w-3.5 h-3.5 text-orange-600" />
+                  HS Bỏ tiết
+                </span>
+                <span className="text-[10px] bg-orange-100 px-1.5 py-0.2 rounded text-orange-800 font-semibold">Bỏ tiết học</span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-extrabold text-orange-950">
+                {skippedClassList.length}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Tự ý bỏ tiết trên lớp</div>
+            </div>
+
+            {/* Card 3: Ăn không học */}
             <div
               onClick={() => setSelectedCategory('ate_no_class')}
               className={`p-3.5 sm:p-4 rounded-2xl border transition cursor-pointer shadow-xs ${

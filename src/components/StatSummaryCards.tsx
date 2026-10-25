@@ -6,7 +6,8 @@ import {
   MapPinOff, 
   FileText, 
   AlertTriangle,
-  BedDouble
+  BedDouble,
+  Ban
 } from 'lucide-react';
 import { AggregatedStats, AttendanceStatus } from '../types';
 
@@ -47,6 +48,20 @@ export const StatSummaryCards: React.FC<StatSummaryCardsProps> = ({
       textColor: 'text-emerald-700',
       badgeBg: 'bg-emerald-100 text-emerald-800',
       icon: CheckCircle2,
+    },
+    {
+      id: 'skipped_class' as const,
+      label: 'HS Bỏ tiết',
+      count: stats.skippedClass,
+      subtext: 'Bỏ tiết trên lớp học',
+      color: 'orange',
+      bg: 'bg-orange-50/90',
+      border: 'border-orange-300',
+      activeBorder: 'ring-2 ring-orange-600 border-orange-600',
+      textColor: 'text-orange-800',
+      badgeBg: 'bg-orange-200 text-orange-950 font-bold',
+      icon: Ban,
+      alert: stats.skippedClass > 0,
     },
     {
       id: 'ate_no_class' as const,
@@ -120,7 +135,7 @@ export const StatSummaryCards: React.FC<StatSummaryCardsProps> = ({
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-8 gap-3 mb-6">
       {cards.map((c) => {
         const Icon = c.icon;
         const isSelected = selectedFilter === c.id;

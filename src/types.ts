@@ -1,5 +1,6 @@
 export type AttendanceStatus = 
   | 'present' 
+  | 'skipped_class'
   | 'ate_no_class' 
   | 'not_at_school_this_week' 
   | 'leave_excused' 
@@ -21,6 +22,15 @@ export interface Student {
   status: 'active' | 'graduated' | 'transferred';
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface RoomConfig {
+  id: string;
+  name: string;
+  gender: 'Nam' | 'Nữ' | 'Khác';
+  capacity?: number; // Số lượng học sinh / số giường tối đa (hoặc undefined nếu không giới hạn)
+  notes?: string;
+  order?: number;
 }
 
 export interface AttendanceRecord {
@@ -49,6 +59,7 @@ export interface RoomSummary {
   teacherName?: string;
   totalStudents: number;
   presentCount: number;
+  skippedClassCount?: number;
   ateNoClassCount: number;
   notAtSchoolThisWeekCount: number;
   leaveExcusedCount: number;
@@ -142,12 +153,15 @@ export const NIGHT_STUDY_CONFIG: Record<NightStudyStatus, {
   },
 };
 
+export type AllowedModule = 'attendance' | 'night_study' | 'competition' | 'room_duty';
+
 export interface AuthorizedUser {
   id?: string;
   email: string;
   name: string;
   role: 'admin' | 'teacher';
   assignedRooms: string[]; // room names or ['ALL']
+  allowedModules?: AllowedModule[]; // Trạng thái được cấp quyền riêng: chỉ được xem/sửa trạng thái được cấp
   phone?: string;
   zaloQrData?: string; // Mã QR Zalo cá nhân / link zalo.me / số điện thoại đăng ký Zalo
   zaloId?: string; // ID Zalo hoặc tên hiển thị Zalo
@@ -158,6 +172,7 @@ export interface AuthorizedUser {
 export interface AggregatedStats {
   total: number;
   present: number;
+  skippedClass: number;
   ateNoClass: number;
   notAtSchoolThisWeek: number;
   leaveExcused: number;
@@ -180,6 +195,14 @@ export const STATUS_CONFIG: Record<AttendanceStatus, {
     bgLight: 'bg-emerald-50 text-emerald-800 border-emerald-300',
     badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
     description: 'Học sinh có mặt tại khu nội trú, ăn cơm và tham gia học trên lớp',
+  },
+  skipped_class: {
+    label: 'Học sinh bỏ tiết học trên lớp',
+    shortLabel: 'HS Bỏ tiết',
+    color: 'orange',
+    bgLight: 'bg-orange-50 text-orange-800 border-orange-300',
+    badgeClass: 'bg-orange-100 text-orange-900 border border-orange-300 font-bold',
+    description: 'Học sinh tự ý bỏ tiết học trên lớp (bỏ 1 hoặc nhiều tiết trong các buổi học)',
   },
   ate_no_class: {
     label: 'Lên ăn không đi học',
@@ -214,3 +237,127 @@ export const STATUS_CONFIG: Record<AttendanceStatus, {
     description: 'Tự ý bỏ tiết, tự ý về nóc/thôn hoặc trốn học không có lý do',
   },
 };
+
+// ==========================================
+// CHẤM ĐIỂM THI ĐUA PHÒNG NỘI TRÚ (25 PHÒNG)
+// ==========================================
+export interface CompetitionCriterion {
+  id: string;
+  name: string; // Tên tiêu chí: Vệ sinh phòng ở, Nề nếp phòng ở, Vệ sinh khu vực, Sử dụng ĐT sai quy định, Nội quy nhà trường...
+  standardPoints: number; // Định mức điểm (mặc định 100 điểm mỗi tiêu chí)
+  description?: string;
+  order: number;
+  isActive: boolean;
+}
+
+export interface CompetitionDepartment {
+  id: string;
+  name: string; // Ban Giám hiệu, Ban Quản sinh (4 người), Y tế, GV trực đêm tự học, Ban Thanh tra ND, Đoàn TN...
+  description?: string;
+  membersCount?: number;
+  assignedEmails?: string[];
+  isActive: boolean;
+  order: number;
+}
+
+export interface CompetitionRoomEvaluation {
+  id: string; // {periodKey}_{roomId}_{evaluatorEmailSanitized}
+  date: string; // YYYY-MM-DD
+  weekLabel: string; // Ví dụ: "Tuần 24", "Tuần 25", "Ngày 24/10/2026"
+  roomId: string; // e.g. "Phòng Nam 01", "Phòng Nữ 15"
+  roomGender: 'Nam' | 'Nữ';
+  departmentId: string;
+  departmentName: string;
+  evaluatorEmail: string;
+  evaluatorName: string;
+  scores: Record<string, number>; // criterionId -> điểm thực tế (0..standardPoints)
+  deductions?: Record<string, number>; // criterionId -> điểm trừ
+  notes?: Record<string, string>; // criterionId -> ghi chú vi phạm cụ thể
+  generalNote?: string;
+  evidencePhotos?: string[]; // Danh sách ảnh chụp minh chứng (base64 data URI)
+  criterionPhotos?: Record<string, string[]>; // Danh sách ảnh minh chứng riêng cho từng tiêu chí { criterionId: [dataUrl, ...] }
+  totalScore: number; // Điểm trung bình thang 100 hoặc tổng điểm
+  submitted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DepartmentScoreSummary {
+  departmentId: string;
+  departmentName: string;
+  evaluatorEmail: string;
+  evaluatorName: string;
+  totalScore: number;
+  evidencePhotosCount: number;
+  submittedAt: string;
+  generalNote?: string;
+  scores: Record<string, number>;
+  notes?: Record<string, string>;
+  evidencePhotos?: string[];
+  criterionPhotos?: Record<string, string[]>;
+}
+
+export interface CompetitionDeductionRules {
+  dayLeaveUnexcusedRate: number; // default: 5 (1 HS vắng không phép trừ 5đ)
+  daySkippedClassRate: number;   // default: 5 (1 HS bỏ tiết trừ 5đ)
+  dayAteNoClassRate: number;     // default: 10 (1 HS lên ăn không đi học trừ 10đ)
+  nightLeaveUnexcusedRate: number;// default: 5 (1 HS vắng đêm không phép trừ 5đ)
+  maxBonusPointsLimit: number;   // default: 100 (định mức tối đa 100đ)
+}
+
+export interface RoomCompetitionBonus {
+  id?: string;
+  roomId: string;
+  dateOrWeek: string;
+  points: number; // 0..100
+  reason: string;
+  awardedBy?: string;
+  awardedAt?: string;
+}
+
+export interface RoomAttendanceBreakdown {
+  // Mục 1: Điểm danh của GVCN (Chính khóa)
+  dayTotalStudents: number;
+  dayLeaveUnexcusedCount: number;
+  dayLeaveUnexcusedDeduction: number;
+  daySkippedClassCount: number;
+  daySkippedClassDeduction: number;
+  dayAteNoClassCount: number;
+  dayAteNoClassDeduction: number;
+  dayLeaveExcusedCount: number; // 0đ trừ
+  dayNotAtSchoolCount: number;  // 0đ trừ
+  totalDayDeduction: number;
+
+  // Mục 2: Điểm danh tự học đêm (19h - 20h30)
+  nightTotalStudents: number;
+  nightLeaveUnexcusedCount: number;
+  nightLeaveUnexcusedDeduction: number;
+  nightLeaveExcusedCount: number; // 0đ trừ
+  nightPresentCount: number;
+  totalNightDeduction: number;
+
+  // Trạng thái cộng điểm thi đua của Quản trị viên (Định mức 100đ)
+  adminBonusPoints: number;
+  adminBonusReason?: string;
+
+  // Điểm các bộ phận
+  departmentBaseScore: number;
+  hasDepartmentEvaluation: boolean;
+
+  // TỔNG ĐIỂM THI ĐUA
+  finalTotalScore: number;
+}
+
+export interface RoomRankingResult {
+  roomId: string;
+  roomName: string;
+  roomGender: 'Nam' | 'Nữ';
+  evaluationCount: number;
+  averageScore: number;
+  departmentScores: DepartmentScoreSummary[];
+  allPhotos: string[];
+  rank: number;
+  statusAward: string; // "Phòng Xuất Sắc", "Phòng Tiêu Biểu", "Đạt Chuẩn", "Cần Chấn Chỉnh"
+  attendanceBreakdown?: RoomAttendanceBreakdown;
+  finalTotalScore?: number;
+}

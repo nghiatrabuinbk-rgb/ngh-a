@@ -77,5 +77,29 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAuthorizedUser();
     }
+
+    // Room configs
+    match /room_configs/{configId} {
+      allow read: if isAuthorizedUser();
+      allow create, update, delete: if isAuthorizedUser();
+    }
+
+    // Competition criteria & departments
+    match /competition_criteria/{criterionId} {
+      allow read: if isSignedIn() || isAuthorizedUser();
+      allow create, update, delete: if isAuthorizedUser();
+    }
+
+    match /competition_departments/{deptId} {
+      allow read: if isSignedIn() || isAuthorizedUser();
+      allow create, update, delete: if isAuthorizedUser();
+    }
+
+    // Competition room evaluations
+    match /competition_evaluations/{evaluationId} {
+      allow read: if isSignedIn() || isAuthorizedUser();
+      allow create, update: if isSignedIn() || isAuthorizedUser();
+      allow delete: if isAuthorizedUser();
+    }
   }
 }

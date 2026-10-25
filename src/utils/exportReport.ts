@@ -5,6 +5,7 @@ export interface RoomStatsRow {
   room: string;
   total: number;
   present: number;
+  skippedClass?: number;
   ateNoClass: number;
   notAtSchoolThisWeek: number;
   leaveExcused: number;
@@ -43,6 +44,7 @@ export function exportPeriodicReportToExcel({
   schoolName = 'Trường PTDTBT THCS Trà Đốc - TP Đà Nẵng',
   reporterName = 'Ban Quản Lý Nội Trú',
   presentList,
+  skippedClassList = [],
   ateNoClassList,
   leaveExcusedList,
   leaveUnexcusedList,
@@ -54,6 +56,7 @@ export function exportPeriodicReportToExcel({
   schoolName?: string;
   reporterName?: string;
   presentList: DetailedReportItem[];
+  skippedClassList?: DetailedReportItem[];
   ateNoClassList: DetailedReportItem[];
   leaveExcusedList: DetailedReportItem[];
   leaveUnexcusedList: DetailedReportItem[];
@@ -338,7 +341,7 @@ export function exportSingleListToExcel({
   title: string;
   periodLabel: string;
   list: DetailedReportItem[];
-  categoryType: 'present' | 'ate_no_class' | 'leave_excused' | 'leave_unexcused' | 'stay_weekend';
+  categoryType: 'present' | 'skipped_class' | 'ate_no_class' | 'leave_excused' | 'leave_unexcused' | 'stay_weekend';
   schoolName?: string;
 }) {
   const wb = XLSX.utils.book_new();

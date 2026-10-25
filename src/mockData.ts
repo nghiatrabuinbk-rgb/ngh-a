@@ -1,4 +1,4 @@
-import { Student, AuthorizedUser } from './types';
+import { Student, AuthorizedUser, RoomConfig } from './types';
 
 // 12 Phòng Nam
 export const MALE_ROOMS = [
@@ -18,23 +18,41 @@ export const MALE_ROOMS = [
 
 // 13 Phòng Nữ
 export const FEMALE_ROOMS = [
-  'Phòng Nữ 01',
-  'Phòng Nữ 02',
-  'Phòng Nữ 03',
-  'Phòng Nữ 04',
-  'Phòng Nữ 05',
-  'Phòng Nữ 06',
-  'Phòng Nữ 07',
-  'Phòng Nữ 08',
-  'Phòng Nữ 09',
-  'Phòng Nữ 10',
-  'Phòng Nữ 11',
-  'Phòng Nữ 12',
   'Phòng Nữ 13',
+  'Phòng Nữ 14',
+  'Phòng Nữ 15',
+  'Phòng Nữ 16',
+  'Phòng Nữ 17',
+  'Phòng Nữ 18',
+  'Phòng Nữ 19',
+  'Phòng Nữ 20',
+  'Phòng Nữ 21',
+  'Phòng Nữ 22',
+  'Phòng Nữ 23',
+  'Phòng Nữ 24',
+  'Phòng Nữ 25',
 ];
 
 // Tổng số 25 phòng nội trú (12 nam, 13 nữ)
 export const INITIAL_ROOMS = [...MALE_ROOMS, ...FEMALE_ROOMS];
+
+// Danh sách cấu hình chuẩn 25 phòng ở có thể tùy biến số lượng giường, thêm bớt phòng
+export const DEFAULT_ROOM_CONFIGS: RoomConfig[] = [
+  ...MALE_ROOMS.map((name, i) => ({
+    id: `phong_nam_${String(i + 1).padStart(2, '0')}`,
+    name,
+    gender: 'Nam' as const,
+    capacity: 8,
+    order: i + 1,
+  })),
+  ...FEMALE_ROOMS.map((name, i) => ({
+    id: `phong_nu_${i + 13}`,
+    name,
+    gender: 'Nữ' as const,
+    capacity: 8,
+    order: i + 13,
+  })),
+];
 
 export const INITIAL_CLASSES = ['6A', '6B', '7A', '7B', '8A', '8B', '9A', '9B'];
 
@@ -60,6 +78,7 @@ export const DEFAULT_TEACHERS_LIST: AuthorizedUser[] = [
     name: 'Thầy Nghĩa (Quản Trị / BGH)',
     role: 'admin',
     assignedRooms: ['ALL'],
+    allowedModules: ['attendance', 'night_study', 'competition', 'room_duty'],
     phone: '0981234567',
     zaloQrData: 'https://zalo.me/0981234567',
     zaloId: 'nghiatrabui',
@@ -67,9 +86,10 @@ export const DEFAULT_TEACHERS_LIST: AuthorizedUser[] = [
   },
   {
     email: 'mainguyen.tradoc@gmail.com',
-    name: 'Cô Nguyễn Thị Mai',
+    name: 'Cô Nguyễn Thị Mai (GVCN)',
     role: 'teacher',
     assignedRooms: ['Phòng Nam 01', 'Phòng Nam 02', 'Phòng Nam 03'],
+    allowedModules: ['attendance'], // Chỉ được cấp quyền: Điểm danh của GVCN
     phone: '0978111222',
     zaloQrData: 'https://zalo.me/0978111222',
     zaloId: 'mainguyen_gv',
@@ -77,9 +97,10 @@ export const DEFAULT_TEACHERS_LIST: AuthorizedUser[] = [
   },
   {
     email: 'dungtran.tradoc@gmail.com',
-    name: 'Thầy Trần Văn Dũng',
+    name: 'Thầy Trần Văn Dũng (GV Trực Đêm)',
     role: 'teacher',
     assignedRooms: ['Phòng Nam 04', 'Phòng Nam 05', 'Phòng Nam 06'],
+    allowedModules: ['night_study'], // Chỉ được cấp quyền: Điểm danh tự học đêm
     phone: '0912333444',
     zaloQrData: 'https://zalo.me/0912333444',
     zaloId: 'dungtran_gv',
@@ -87,12 +108,24 @@ export const DEFAULT_TEACHERS_LIST: AuthorizedUser[] = [
   },
   {
     email: 'lanho.tradoc@gmail.com',
-    name: 'Cô Hồ Thị Lan',
+    name: 'Cô Hồ Thị Lan (GV Trực Phòng)',
     role: 'teacher',
-    assignedRooms: ['Phòng Nữ 01', 'Phòng Nữ 02', 'Phòng Nữ 03'],
+    assignedRooms: ['Phòng Nữ 13', 'Phòng Nữ 14', 'Phòng Nữ 15'],
+    allowedModules: ['room_duty'], // Chỉ được cấp quyền: Theo dõi và điểm danh của GV trực phòng
     phone: '0934555666',
     zaloQrData: 'https://zalo.me/0934555666',
     zaloId: 'lanho_gv',
+    active: true,
+  },
+  {
+    email: 'thidua.tradoc@gmail.com',
+    name: 'Đoàn Thanh Niên / Ban Thi Đua',
+    role: 'teacher',
+    assignedRooms: ['ALL'],
+    allowedModules: ['competition'], // Chỉ được cấp quyền: Chấm điểm thi đua
+    phone: '0945678999',
+    zaloQrData: 'https://zalo.me/0945678999',
+    zaloId: 'thidua_gv',
     active: true,
   },
 ];
@@ -278,26 +311,26 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     status: 'active',
   },
 
-  // Phòng Nữ 01
+  // Phòng Nữ 13
   {
     name: 'Hồ Thị Mai',
     gender: 'Nữ',
     dob: '2012-03-08',
-    room: 'Phòng Nữ 01',
+    room: 'Phòng Nữ 13',
     bedNumber: 'Giường 01',
     class: '6A',
     village: 'Thôn 1',
     hamlet: 'Nóc Tăk Pổ',
     ethnicity: 'Ca Dong',
     parentPhone: '0981234513',
-    notes: 'Trưởng phòng nữ 01, lễ phép',
+    notes: 'Trưởng phòng nữ 13, lễ phép',
     status: 'active',
   },
   {
     name: 'Đinh Thị Hoa',
     gender: 'Nữ',
     dob: '2012-07-16',
-    room: 'Phòng Nữ 01',
+    room: 'Phòng Nữ 13',
     bedNumber: 'Giường 02',
     class: '6B',
     village: 'Thôn 2',
@@ -311,7 +344,7 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     name: 'Nguyễn Thị Diễm',
     gender: 'Nữ',
     dob: '2011-01-20',
-    room: 'Phòng Nữ 01',
+    room: 'Phòng Nữ 13',
     bedNumber: 'Giường 03',
     class: '7A',
     village: 'Thôn 3',
@@ -322,12 +355,12 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     status: 'active',
   },
 
-  // Phòng Nữ 02
+  // Phòng Nữ 14
   {
     name: 'Hồ Thị Kim',
     gender: 'Nữ',
     dob: '2011-09-14',
-    room: 'Phòng Nữ 02',
+    room: 'Phòng Nữ 14',
     bedNumber: 'Giường 01',
     class: '7B',
     village: 'Thôn 4',
@@ -341,7 +374,7 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     name: 'Võ Thị Lệ',
     gender: 'Nữ',
     dob: '2012-10-10',
-    room: 'Phòng Nữ 02',
+    room: 'Phòng Nữ 14',
     bedNumber: 'Giường 02',
     class: '6A',
     village: 'Thôn 5',
@@ -352,12 +385,12 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     status: 'active',
   },
 
-  // Phòng Nữ 03
+  // Phòng Nữ 15
   {
     name: 'Hồ Thị Tuyết',
     gender: 'Nữ',
     dob: '2011-05-28',
-    room: 'Phòng Nữ 03',
+    room: 'Phòng Nữ 15',
     bedNumber: 'Giường 01',
     class: '7A',
     village: 'Thôn 1',
@@ -371,7 +404,7 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     name: 'Đinh Thị Nguyệt',
     gender: 'Nữ',
     dob: '2011-12-03',
-    room: 'Phòng Nữ 03',
+    room: 'Phòng Nữ 15',
     bedNumber: 'Giường 02',
     class: '7B',
     village: 'Thôn 2',
@@ -382,12 +415,12 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     status: 'active',
   },
 
-  // Phòng Nữ 04
+  // Phòng Nữ 16
   {
     name: 'Hồ Thị Sen',
     gender: 'Nữ',
     dob: '2010-06-25',
-    room: 'Phòng Nữ 04',
+    room: 'Phòng Nữ 16',
     bedNumber: 'Giường 01',
     class: '8A',
     village: 'Thôn 3',
@@ -401,7 +434,7 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     name: 'Đinh Thị Lan',
     gender: 'Nữ',
     dob: '2010-11-19',
-    room: 'Phòng Nữ 04',
+    room: 'Phòng Nữ 16',
     bedNumber: 'Giường 02',
     class: '8B',
     village: 'Thôn 4',
@@ -412,12 +445,12 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     status: 'active',
   },
 
-  // Phòng Nữ 05
+  // Phòng Nữ 17
   {
     name: 'Hồ Thị Thảo',
     gender: 'Nữ',
     dob: '2009-03-30',
-    room: 'Phòng Nữ 05',
+    room: 'Phòng Nữ 17',
     bedNumber: 'Giường 01',
     class: '9A',
     village: 'Thôn 5',
@@ -431,7 +464,7 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     name: 'Võ Thị Hồng',
     gender: 'Nữ',
     dob: '2009-08-15',
-    room: 'Phòng Nữ 05',
+    room: 'Phòng Nữ 17',
     bedNumber: 'Giường 02',
     class: '9B',
     village: 'Thôn 5',
@@ -442,12 +475,12 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     status: 'active',
   },
 
-  // Phòng Nữ 06
+  // Phòng Nữ 18
   {
     name: 'Hồ Thị Ngọc',
     gender: 'Nữ',
     dob: '2010-04-05',
-    room: 'Phòng Nữ 06',
+    room: 'Phòng Nữ 18',
     bedNumber: 'Giường 01',
     class: '8A',
     village: 'Thôn 1',
@@ -461,7 +494,7 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     name: 'Đặng Thị Thắm',
     gender: 'Nữ',
     dob: '2009-05-18',
-    room: 'Phòng Nữ 06',
+    room: 'Phòng Nữ 18',
     bedNumber: 'Giường 02',
     class: '9A',
     village: 'Thôn 2',
@@ -475,7 +508,7 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     name: 'Nguyễn Thị Vân',
     gender: 'Nữ',
     dob: '2009-12-22',
-    room: 'Phòng Nữ 06',
+    room: 'Phòng Nữ 18',
     bedNumber: 'Giường 03',
     class: '9B',
     village: 'Thôn 3',
@@ -484,5 +517,127 @@ export const SEED_STUDENTS: Omit<Student, 'id'>[] = [
     parentPhone: '0981234526',
     notes: 'Gương mẫu tự học',
     status: 'active',
+  },
+];
+
+// ==========================================
+// CẤU HÌNH TIÊU CHÍ THI ĐUA PHÒNG Ở (ĐỊNH MỨC 100 ĐIỂM)
+// ==========================================
+export const DEFAULT_COMPETITION_CRITERIA: {
+  id: string;
+  name: string;
+  standardPoints: number;
+  description: string;
+  order: number;
+  isActive: boolean;
+}[] = [
+  {
+    id: 'criterion_vesinh_phong',
+    name: 'Vệ sinh phòng ở',
+    standardPoints: 100,
+    description: 'Sàn nhà sạch sẽ, không rác thải, mạng nhện, đồ dùng ngăn nắp, chăn màn gấp vuông vức.',
+    order: 1,
+    isActive: true,
+  },
+  {
+    id: 'criterion_nenep_phong',
+    name: 'Nề nếp phòng ở',
+    standardPoints: 100,
+    description: 'Tác phong trật tự, ngủ nghỉ đúng giờ quy định, không tụ tập gây ồn ào ảnh hưởng phòng khác.',
+    order: 2,
+    isActive: true,
+  },
+  {
+    id: 'criterion_vesinh_khuvuc',
+    name: 'Vệ sinh khu vực & hành lang',
+    standardPoints: 100,
+    description: 'Trực nhật hành lang trước phòng, khu vệ sinh chung, ban công sạch sẽ, sắp xếp dép guốc gọn gàng.',
+    order: 3,
+    isActive: true,
+  },
+  {
+    id: 'criterion_dienthoai',
+    name: 'Sử dụng điện thoại đúng quy định',
+    standardPoints: 100,
+    description: 'Tuân thủ giờ giao nộp điện thoại, tuyệt đối không lén sử dụng trong giờ tự học đêm hoặc sau 22h00.',
+    order: 4,
+    isActive: true,
+  },
+  {
+    id: 'criterion_noiquy',
+    name: 'Thực hiện nội quy nhà trường',
+    standardPoints: 100,
+    description: 'Chấp hành nghiêm giờ kẻng báo thức, giờ ăn tập trung, trang phục tác phong, lễ phép và đoàn kết.',
+    order: 5,
+    isActive: true,
+  },
+];
+
+// ==========================================
+// CÁC BỘ PHẬN THAM GIA CHẤM ĐIỂM THI ĐUA
+// ==========================================
+export const DEFAULT_COMPETITION_DEPARTMENTS: {
+  id: string;
+  name: string;
+  description: string;
+  membersCount: number;
+  isActive: boolean;
+  order: number;
+}[] = [
+  {
+    id: 'dept_bgh',
+    name: 'Ban Giám hiệu',
+    description: 'Hiệu trưởng, Phó Hiệu trưởng kiểm tra định kỳ hoặc đột xuất',
+    membersCount: 2,
+    isActive: true,
+    order: 1,
+  },
+  {
+    id: 'dept_bqs',
+    name: 'Ban Quản sinh (4 thành viên)',
+    description: 'Tổ quản sinh gồm 4 thầy cô phụ trách trực tiếp đời sống nội trú hằng ngày',
+    membersCount: 4,
+    isActive: true,
+    order: 2,
+  },
+  {
+    id: 'dept_yte',
+    name: 'Cán bộ Y tế',
+    description: 'Phụ trách kiểm tra vệ sinh an toàn, phòng dịch, tủ thuốc và sức khỏe học sinh',
+    membersCount: 1,
+    isActive: true,
+    order: 3,
+  },
+  {
+    id: 'dept_gv_tudtc',
+    name: 'Giáo viên trực đêm tự học',
+    description: 'Thầy cô được phân công trực giám sát giờ tự học tối tại các phòng',
+    membersCount: 1,
+    isActive: true,
+    order: 4,
+  },
+  {
+    id: 'dept_bttnd',
+    name: 'Ban Thanh tra nhân dân',
+    description: 'Giám sát tính công bằng, khách quan trong quản lý và chấm điểm thi đua',
+    membersCount: 3,
+    isActive: true,
+    order: 5,
+  },
+  {
+    id: 'dept_dtn',
+    name: 'Đoàn Thanh niên / Đội TNTP',
+    description: 'Bí thư Đoàn, Tổng phụ trách Đội kiểm tra nề nếp thiếu niên nhi đồng',
+    membersCount: 2,
+    isActive: true,
+    order: 6,
+  },
+  {
+    id: 'dept_tuychon',
+    name: 'Bộ phận kiểm tra đột xuất / Tùy chọn',
+    description: 'Tổ công tác đột xuất hoặc đại diện phụ huynh, ban đại diện học sinh',
+    membersCount: 1,
+    isActive: true,
+    order: 7,
   },
 ];

@@ -15,9 +15,47 @@ import {
   QrCode,
   Printer,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Lock,
+  Layers,
+  Check
 } from 'lucide-react';
-import { AuthorizedUser } from '../types';
+import { AuthorizedUser, AllowedModule } from '../types';
+
+export const MODULE_CONFIG: Record<AllowedModule, { label: string; shortLabel: string; color: string; bg: string; border: string; desc: string }> = {
+  attendance: {
+    label: 'Điểm danh của GVCN',
+    shortLabel: 'Điểm danh GVCN',
+    color: 'text-emerald-800',
+    bg: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+    border: 'border-emerald-300',
+    desc: 'Điểm danh sĩ số lớp, báo suất ăn cuối tuần, theo dõi chuyên cần học sinh',
+  },
+  night_study: {
+    label: 'Điểm danh tự học đêm',
+    shortLabel: 'Tự học đêm',
+    color: 'text-amber-800',
+    bg: 'bg-amber-50 text-amber-900 border-amber-300',
+    border: 'border-amber-300',
+    desc: 'Điểm danh trực đêm, kiểm tra học sinh tự học tại 25 phòng ở',
+  },
+  competition: {
+    label: 'Chấm điểm thi đua',
+    shortLabel: 'Chấm thi đua',
+    color: 'text-yellow-900',
+    bg: 'bg-yellow-100 text-yellow-950 border-yellow-400 font-bold',
+    border: 'border-yellow-400',
+    desc: 'Chấm điểm vệ sinh, nề nếp 25 phòng, chụp và tải ảnh minh chứng',
+  },
+  room_duty: {
+    label: 'Theo dõi & điểm danh của GV trực phòng',
+    shortLabel: 'Trực phòng',
+    color: 'text-teal-900',
+    bg: 'bg-teal-50 text-teal-900 border-teal-300',
+    border: 'border-teal-300',
+    desc: 'Theo dõi sĩ số phòng, điểm danh ca trực phòng, ghi nhật ký ca trực',
+  },
+};
 
 interface PermissionsManagementViewProps {
   authorizedUsers: AuthorizedUser[];
@@ -48,6 +86,7 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
   const [formZaloQrData, setFormZaloQrData] = useState('');
   const [formZaloId, setFormZaloId] = useState('');
   const [formAssignedRooms, setFormAssignedRooms] = useState<string[]>(['ALL']);
+  const [formAllowedModules, setFormAllowedModules] = useState<AllowedModule[]>(['attendance']);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Open modal
@@ -60,6 +99,7 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
     setFormZaloQrData('');
     setFormZaloId('');
     setFormAssignedRooms(['ALL']);
+    setFormAllowedModules(['attendance']);
     setIsModalOpen(true);
   };
 
@@ -72,6 +112,7 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
     setFormZaloQrData(u.zaloQrData || '');
     setFormZaloId(u.zaloId || '');
     setFormAssignedRooms(u.assignedRooms && u.assignedRooms.length > 0 ? u.assignedRooms : ['ALL']);
+    setFormAllowedModules(u.allowedModules && u.allowedModules.length > 0 ? u.allowedModules : ['room_duty']);
     setIsModalOpen(true);
   };
 
@@ -91,6 +132,17 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
     setFormAssignedRooms(updated);
   };
 
+  const toggleModuleSelection = (mod: AllowedModule) => {
+    setFormAllowedModules((prev) => {
+      if (prev.includes(mod)) {
+        if (prev.length <= 1) return prev; // Keep at least one
+        return prev.filter((m) => m !== mod);
+      } else {
+        return [...prev, mod];
+      }
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formEmail.trim() || !formName.trim()) {
@@ -105,6 +157,9 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
         name: formName.trim(),
         role: formRole,
         assignedRooms: formAssignedRooms,
+        allowedModules: formRole === 'admin' 
+          ? ['attendance', 'night_study', 'competition', 'room_duty']
+          : formAllowedModules,
         phone: formPhone.trim(),
         zaloQrData: formZaloQrData.trim() || (formPhone.trim() ? `https://zalo.me/${formPhone.trim()}` : ''),
         zaloId: formZaloId.trim(),
@@ -224,13 +279,40 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
                     </td>
                     <td className="py-3 px-3">
                       {user.role === 'admin' ? (
-                        <span className="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded text-xs">
-                          Quản Trị Viên (BGH)
-                        </span>
+                        <div className="space-y-1">
+                          <span className="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded text-xs block w-fit">
+                            Quản Trị Viên (BGH)
+                          </span>
+                          <span className="text-[10px] text-amber-700 block font-semibold">
+                            ★ Toàn quyền tất cả trạng thái
+                          </span>
+                        </div>
                       ) : (
-                        <span className="bg-cyan-100 text-cyan-900 border border-cyan-300 font-medium px-2 py-0.5 rounded text-xs">
-                          Giáo Viên Trực Phòng
-                        </span>
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-bold text-slate-600 block">
+                            Trạng thái được cấp:
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {user.allowedModules && user.allowedModules.length > 0 ? (
+                              user.allowedModules.map((m) => {
+                                const cfg = MODULE_CONFIG[m];
+                                return (
+                                  <span
+                                    key={m}
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${cfg?.bg || 'bg-slate-100 text-slate-800 border-slate-200'}`}
+                                    title={cfg?.label || m}
+                                  >
+                                    ✓ {cfg?.shortLabel || m}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                                Chưa phân quyền
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </td>
                     <td className="py-3 px-3 text-xs">
@@ -283,7 +365,7 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
                           <button
                             onClick={() => handleOpenEditModal(user)}
                             className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                            title="Chỉnh sửa phân quyền"
+                            title="Chỉnh sửa phân quyền trạng thái"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
@@ -313,7 +395,7 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">
-                {editingUser ? 'Chỉnh Sửa Quyền & Mã Zalo Giáo Viên' : 'Cấp Quyền Đăng Nhập Mới Cho Giáo Viên'}
+                {editingUser ? 'Chỉnh Sửa Phân Quyền Trạng Thái Giáo Viên' : 'Cấp Quyền Đăng Nhập Mới Cho Giáo Viên'}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -363,8 +445,8 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
                     onChange={(e) => setFormRole(e.target.value as 'admin' | 'teacher')}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium"
                   >
-                    <option value="teacher">Giáo viên trực phòng</option>
-                    <option value="admin">Quản trị viên (BGH / BQL)</option>
+                    <option value="teacher">Giáo viên phân quyền riêng</option>
+                    <option value="admin">Quản trị viên (BGH / Toàn quyền)</option>
                   </select>
                 </div>
 
@@ -377,6 +459,60 @@ export const PermissionsManagementView: React.FC<PermissionsManagementViewProps>
                     onChange={(e) => setFormPhone(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono"
                   />
+                </div>
+              </div>
+
+              {/* Module Permission Checkboxes (Cấp quyền từng trạng thái riêng biệt) */}
+              <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-300/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-950">
+                    <Lock className="w-4 h-4 text-amber-700" />
+                    <span>Cấp quyền trạng thái thao tác (*):</span>
+                  </div>
+                  <span className="text-[10px] text-amber-800 italic font-semibold">
+                    Chỉ xem & sửa trạng thái được cấp
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-600">
+                  {formRole === 'admin' ? (
+                    <span className="font-semibold text-amber-900">
+                      ★ Tài khoản Quản trị viên (BGH) được cấp toàn quyền tất cả các trạng thái và cài đặt hệ thống.
+                    </span>
+                  ) : (
+                    <span>
+                      Chọn các trạng thái mà giáo viên này được phép thực hiện khi đăng nhập bằng Gmail. Giáo viên <strong>không được xem hoặc chỉnh sửa</strong> các trạng thái khác.
+                    </span>
+                  )}
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {(['attendance', 'night_study', 'competition', 'room_duty'] as AllowedModule[]).map((mod) => {
+                    const cfg = MODULE_CONFIG[mod];
+                    const isChecked = formRole === 'admin' || formAllowedModules.includes(mod);
+                    return (
+                      <label
+                        key={mod}
+                        className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition cursor-pointer ${
+                          isChecked
+                            ? `${cfg.bg} ring-2 ring-amber-400/50 shadow-xs font-bold`
+                            : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                        } ${formRole === 'admin' ? 'opacity-80 cursor-not-allowed' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          disabled={formRole === 'admin'}
+                          checked={isChecked}
+                          onChange={() => toggleModuleSelection(mod)}
+                          className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div className="space-y-0.5">
+                          <div className="text-xs">{cfg.label}</div>
+                          <div className="text-[10px] font-normal text-slate-500 line-clamp-1">{cfg.desc}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
