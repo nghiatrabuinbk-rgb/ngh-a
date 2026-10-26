@@ -7,6 +7,8 @@ import {
   deleteDoc,
   query,
   where,
+  onSnapshot,
+  Unsubscribe,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { 
@@ -60,6 +62,24 @@ const LOCAL_STORAGE_KEY_COMPETITION_RULES = 'qlnt_competition_rules_v1';
 const LOCAL_STORAGE_KEY_COMPETITION_BONUSES = 'qlnt_competition_bonuses_v1';
 const LOCAL_STORAGE_FLAG_CLEARED = 'qlnt_students_cleared_flag';
 
+// One-time client purge: ensure all previous mock students and old attendance records are wiped completely
+if (typeof window !== 'undefined') {
+  try {
+    const PURGE_KEY = 'qlnt_purge_v6_zero_slate';
+    if (!localStorage.getItem(PURGE_KEY)) {
+      localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify([]));
+      localStorage.setItem(LOCAL_STORAGE_KEY_ATTENDANCE, JSON.stringify({}));
+      localStorage.setItem(LOCAL_STORAGE_KEY_SUMMARIES, JSON.stringify({}));
+      localStorage.setItem(LOCAL_STORAGE_KEY_NIGHT_ATTENDANCE, JSON.stringify({}));
+      localStorage.setItem(LOCAL_STORAGE_KEY_NIGHT_SUMMARIES, JSON.stringify({}));
+      localStorage.setItem(LOCAL_STORAGE_FLAG_CLEARED, 'true');
+      localStorage.setItem(PURGE_KEY, 'true');
+    }
+  } catch (e) {
+    console.warn('Storage purge warning:', e);
+  }
+}
+
 export const DEFAULT_COMPETITION_DEDUCTION_RULES: CompetitionDeductionRules = {
   dayLeaveUnexcusedRate: 5,   // 1 HS vắng không phép trừ 5 điểm (2 HS = 10 điểm)
   daySkippedClassRate: 5,     // 1 HS bỏ tiết trừ 5 điểm (2 HS = 10 điểm)
@@ -82,7 +102,6 @@ export const OLD_FEMALE_ROOM_NAME_MAP: Record<string, string> = {
   'Phòng Nữ 10': 'Phòng Nữ 22',
   'Phòng Nữ 11': 'Phòng Nữ 23',
   'Phòng Nữ 12': 'Phòng Nữ 24',
-  'Phòng Nữ 13': 'Phòng Nữ 25',
   'Phòng Nữ 1': 'Phòng Nữ 13',
   'Phòng Nữ 2': 'Phòng Nữ 14',
   'Phòng Nữ 3': 'Phòng Nữ 15',
@@ -167,7 +186,6 @@ export async function deleteAuthorizedUser(email: string): Promise<void> {
 }
 
 export async function fetchStudents(): Promise<Student[]> {
-  const isCleared = localStorage.getItem(LOCAL_STORAGE_FLAG_CLEARED) === 'true';
   try {
     const snap = await getDocs(collection(db, STUDENTS_COL));
     const list: Student[] = [];
@@ -181,66 +199,77 @@ export async function fetchStudents(): Promise<Student[]> {
       list.push({ ...data, room, id: d.id });
     });
 
-    if (list.length === 0) {
-      if (isCleared) {
-        return [];
-      }
-      // Seed default students if empty and not cleared
-      const seeded: Student[] = [];
-      for (let i = 0; i < SEED_STUDENTS.length; i++) {
-        const item = SEED_STUDENTS[i];
-        const studentId = `hs_${String(i + 1).padStart(3, '0')}`;
-        const newStudent: Student = {
-          ...item,
-          id: studentId,
-          createdAt: new Date().toISOString(),
-        };
-        await setDoc(doc(db, STUDENTS_COL, studentId), newStudent);
-        seeded.push(newStudent);
-      }
-      localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(seeded));
-      return seeded;
-    }
-
-    // Has records in DB, so not cleared
-    localStorage.removeItem(LOCAL_STORAGE_FLAG_CLEARED);
     localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(list));
     return list;
   } catch (error) {
-    console.warn('Fetch students error, using local/seed fallback:', error);
-    if (isCleared) {
-      const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
-      return local ? JSON.parse(local) : [];
-    }
+    console.warn('Fetch students error, reading local cache:', error);
     const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
     if (local) {
-      const parsed: Student[] = JSON.parse(local);
-      const migrated = parsed.map(s => ({
-        ...s,
-        room: OLD_FEMALE_ROOM_NAME_MAP[s.room] || s.room,
-      }));
-      localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(migrated));
-      return migrated;
+      try {
+        const parsed: Student[] = JSON.parse(local);
+        return parsed.map(s => ({
+          ...s,
+          room: OLD_FEMALE_ROOM_NAME_MAP[s.room] || s.room,
+        }));
+      } catch {
+        return [];
+      }
     }
-    const seeded = SEED_STUDENTS.map((s, i) => ({
-      ...s,
-      id: `hs_${String(i + 1).padStart(3, '0')}`,
-    }));
-    localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(seeded));
-    return seeded;
+    return [];
   }
+}
+
+export function subscribeToStudents(
+  onData: (students: Student[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, STUDENTS_COL),
+    (snap) => {
+      const list: Student[] = [];
+      snap.forEach(d => {
+        const data = d.data() as Student;
+        const room = OLD_FEMALE_ROOM_NAME_MAP[data.room] || data.room;
+        list.push({ ...data, room, id: d.id });
+      });
+
+      localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(list));
+      onData(list);
+    },
+    (error) => {
+      console.warn('Realtime students subscription error:', error);
+      if (onError) onError(error);
+    }
+  );
 }
 
 export async function clearAllStudents(): Promise<void> {
   localStorage.setItem(LOCAL_STORAGE_FLAG_CLEARED, 'true');
   localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify([]));
+  localStorage.setItem(LOCAL_STORAGE_KEY_ATTENDANCE, JSON.stringify({}));
+  localStorage.setItem(LOCAL_STORAGE_KEY_SUMMARIES, JSON.stringify({}));
+  localStorage.setItem(LOCAL_STORAGE_KEY_NIGHT_ATTENDANCE, JSON.stringify({}));
+  localStorage.setItem(LOCAL_STORAGE_KEY_NIGHT_SUMMARIES, JSON.stringify({}));
 
   try {
-    const snap = await getDocs(collection(db, STUDENTS_COL));
-    const deletePromises = snap.docs.map(docSnap => deleteDoc(doc(db, STUDENTS_COL, docSnap.id)));
-    await Promise.all(deletePromises);
+    const [studentsSnap, attSnap, sumSnap, nightAttSnap, nightSumSnap] = await Promise.all([
+      getDocs(collection(db, STUDENTS_COL)),
+      getDocs(collection(db, ATTENDANCE_COL)),
+      getDocs(collection(db, ROOM_SUMMARIES_COL)),
+      getDocs(collection(db, NIGHT_ATTENDANCE_COL)),
+      getDocs(collection(db, NIGHT_SUMMARIES_COL)),
+    ]);
+
+    const delPromises = [
+      ...studentsSnap.docs.map(d => deleteDoc(doc(db, STUDENTS_COL, d.id))),
+      ...attSnap.docs.map(d => deleteDoc(doc(db, ATTENDANCE_COL, d.id))),
+      ...sumSnap.docs.map(d => deleteDoc(doc(db, ROOM_SUMMARIES_COL, d.id))),
+      ...nightAttSnap.docs.map(d => deleteDoc(doc(db, NIGHT_ATTENDANCE_COL, d.id))),
+      ...nightSumSnap.docs.map(d => deleteDoc(doc(db, NIGHT_SUMMARIES_COL, d.id))),
+    ];
+    await Promise.all(delPromises);
   } catch (error) {
-    console.warn('Clear all students from Firestore failed:', error);
+    console.warn('Clear all students and attendance from Firestore failed:', error);
   }
 }
 
@@ -401,6 +430,30 @@ export async function fetchRoomConfigs(): Promise<RoomConfig[]> {
   }
 }
 
+export function subscribeToRoomConfigs(
+  onData: (configs: RoomConfig[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, ROOM_CONFIGS_COL),
+    (snap) => {
+      const list: RoomConfig[] = [];
+      snap.forEach(d => {
+        list.push({ ...(d.data() as RoomConfig), id: d.id });
+      });
+      if (list.length > 0) {
+        list.sort((a, b) => (a.order || 0) - (b.order || 0));
+        localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(list));
+        onData(list);
+      }
+    },
+    (error) => {
+      console.warn('Realtime room configs subscription error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
 export async function saveRoomConfig(room: RoomConfig): Promise<void> {
   try {
     await setDoc(doc(db, ROOM_CONFIGS_COL, room.id), {
@@ -499,6 +552,37 @@ export async function fetchAttendanceForDate(date: string): Promise<Record<strin
   }
 }
 
+export function subscribeToAttendanceForDate(
+  date: string,
+  onData: (map: Record<string, AttendanceRecord>) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  const q = query(collection(db, ATTENDANCE_COL), where('date', '==', date));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const map: Record<string, AttendanceRecord> = {};
+      snap.forEach(d => {
+        const data = d.data() as AttendanceRecord;
+        map[data.studentId] = { ...data, id: d.id };
+      });
+      try {
+        const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_ATTENDANCE);
+        const allLocal: Record<string, Record<string, AttendanceRecord>> = localStr ? JSON.parse(localStr) : {};
+        allLocal[date] = map;
+        localStorage.setItem(LOCAL_STORAGE_KEY_ATTENDANCE, JSON.stringify(allLocal));
+      } catch (e) {
+        console.warn('Cache error:', e);
+      }
+      onData(map);
+    },
+    (error) => {
+      console.warn('Realtime attendance subscription error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
 export async function fetchAttendanceForDateRange(
   startDate: string,
   endDate: string
@@ -584,7 +668,8 @@ export async function fetchRoomSummaries(date: string): Promise<Record<string, R
     const map: Record<string, RoomSummary> = {};
     snap.forEach(d => {
       const data = d.data() as RoomSummary;
-      map[data.roomId] = { ...data, id: d.id };
+      const normalizedRoom = OLD_FEMALE_ROOM_NAME_MAP[data.roomId] || data.roomId;
+      map[normalizedRoom] = { ...data, roomId: normalizedRoom, id: d.id };
     });
     return map;
   } catch (error) {
@@ -595,14 +680,50 @@ export async function fetchRoomSummaries(date: string): Promise<Record<string, R
   }
 }
 
+export function subscribeToRoomSummaries(
+  date: string,
+  onData: (map: Record<string, RoomSummary>) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  const q = query(collection(db, ROOM_SUMMARIES_COL), where('date', '==', date));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const map: Record<string, RoomSummary> = {};
+      snap.forEach(d => {
+        const data = d.data() as RoomSummary;
+        const normalizedRoom = OLD_FEMALE_ROOM_NAME_MAP[data.roomId] || data.roomId;
+        map[normalizedRoom] = { ...data, roomId: normalizedRoom, id: d.id };
+      });
+      try {
+        const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_SUMMARIES);
+        const allLocal: Record<string, Record<string, RoomSummary>> = localStr ? JSON.parse(localStr) : {};
+        allLocal[date] = map;
+        localStorage.setItem(LOCAL_STORAGE_KEY_SUMMARIES, JSON.stringify(allLocal));
+      } catch (e) {
+        console.warn('Cache error:', e);
+      }
+      onData(map);
+    },
+    (error) => {
+      console.warn('Realtime room summaries subscription error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
 export async function saveRoomSummary(summary: RoomSummary): Promise<void> {
-  const docId = `${summary.date}_${summary.roomId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  const normalizedRoom = OLD_FEMALE_ROOM_NAME_MAP[summary.roomId] || summary.roomId;
+  const docId = `${summary.date}_${normalizedRoom.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  const payload: RoomSummary = {
+    ...summary,
+    roomId: normalizedRoom,
+    id: docId,
+    updatedAt: new Date().toISOString(),
+  };
+
   try {
-    await setDoc(doc(db, ROOM_SUMMARIES_COL, docId), {
-      ...summary,
-      id: docId,
-      updatedAt: new Date().toISOString(),
-    });
+    await setDoc(doc(db, ROOM_SUMMARIES_COL, docId), payload);
   } catch (error) {
     console.warn('Save summary Firestore error:', error);
   }
@@ -612,7 +733,7 @@ export async function saveRoomSummary(summary: RoomSummary): Promise<void> {
   if (!allLocal[summary.date]) {
     allLocal[summary.date] = {};
   }
-  allLocal[summary.date][summary.roomId] = summary;
+  allLocal[summary.date][normalizedRoom] = payload;
   localStorage.setItem(LOCAL_STORAGE_KEY_SUMMARIES, JSON.stringify(allLocal));
 }
 
@@ -643,6 +764,37 @@ export async function fetchNightAttendanceForDate(date: string): Promise<Record<
     const allLocal: Record<string, Record<string, NightStudyRecord>> = localStr ? JSON.parse(localStr) : {};
     return allLocal[date] || {};
   }
+}
+
+export function subscribeToNightAttendanceForDate(
+  date: string,
+  onData: (map: Record<string, NightStudyRecord>) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  const q = query(collection(db, NIGHT_ATTENDANCE_COL), where('date', '==', date));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const map: Record<string, NightStudyRecord> = {};
+      snap.forEach(d => {
+        const data = d.data() as NightStudyRecord;
+        map[data.studentId] = { ...data, id: d.id };
+      });
+      try {
+        const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_NIGHT_ATTENDANCE);
+        const allLocal: Record<string, Record<string, NightStudyRecord>> = localStr ? JSON.parse(localStr) : {};
+        allLocal[date] = map;
+        localStorage.setItem(LOCAL_STORAGE_KEY_NIGHT_ATTENDANCE, JSON.stringify(allLocal));
+      } catch (e) {
+        console.warn('Cache error:', e);
+      }
+      onData(map);
+    },
+    (error) => {
+      console.warn('Realtime night attendance subscription error:', error);
+      if (onError) onError(error);
+    }
+  );
 }
 
 export async function saveNightAttendanceRecords(records: NightStudyRecord[]): Promise<void> {
@@ -684,7 +836,8 @@ export async function fetchNightRoomSummaries(date: string): Promise<Record<stri
     const map: Record<string, NightRoomSummary> = {};
     snap.forEach(d => {
       const data = d.data() as NightRoomSummary;
-      map[data.roomId] = { ...data, id: d.id };
+      const normalizedRoom = OLD_FEMALE_ROOM_NAME_MAP[data.roomId] || data.roomId;
+      map[normalizedRoom] = { ...data, roomId: normalizedRoom, id: d.id };
     });
     return map;
   } catch (error) {
@@ -695,14 +848,50 @@ export async function fetchNightRoomSummaries(date: string): Promise<Record<stri
   }
 }
 
+export function subscribeToNightRoomSummaries(
+  date: string,
+  onData: (map: Record<string, NightRoomSummary>) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  const q = query(collection(db, NIGHT_SUMMARIES_COL), where('date', '==', date));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const map: Record<string, NightRoomSummary> = {};
+      snap.forEach(d => {
+        const data = d.data() as NightRoomSummary;
+        const normalizedRoom = OLD_FEMALE_ROOM_NAME_MAP[data.roomId] || data.roomId;
+        map[normalizedRoom] = { ...data, roomId: normalizedRoom, id: d.id };
+      });
+      try {
+        const localStr = localStorage.getItem(LOCAL_STORAGE_KEY_NIGHT_SUMMARIES);
+        const allLocal: Record<string, Record<string, NightRoomSummary>> = localStr ? JSON.parse(localStr) : {};
+        allLocal[date] = map;
+        localStorage.setItem(LOCAL_STORAGE_KEY_NIGHT_SUMMARIES, JSON.stringify(allLocal));
+      } catch (e) {
+        console.warn('Cache error:', e);
+      }
+      onData(map);
+    },
+    (error) => {
+      console.warn('Realtime night room summaries subscription error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
 export async function saveNightRoomSummary(summary: NightRoomSummary): Promise<void> {
-  const docId = `${summary.date}_${summary.roomId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  const normalizedRoom = OLD_FEMALE_ROOM_NAME_MAP[summary.roomId] || summary.roomId;
+  const docId = `${summary.date}_${normalizedRoom.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  const payload: NightRoomSummary = {
+    ...summary,
+    roomId: normalizedRoom,
+    id: docId,
+    updatedAt: new Date().toISOString(),
+  };
+
   try {
-    await setDoc(doc(db, NIGHT_SUMMARIES_COL, docId), {
-      ...summary,
-      id: docId,
-      updatedAt: new Date().toISOString(),
-    });
+    await setDoc(doc(db, NIGHT_SUMMARIES_COL, docId), payload);
   } catch (error) {
     console.warn('Save night summary Firestore error:', error);
   }
@@ -712,7 +901,7 @@ export async function saveNightRoomSummary(summary: NightRoomSummary): Promise<v
   if (!allLocal[summary.date]) {
     allLocal[summary.date] = {};
   }
-  allLocal[summary.date][summary.roomId] = summary;
+  allLocal[summary.date][normalizedRoom] = payload;
   localStorage.setItem(LOCAL_STORAGE_KEY_NIGHT_SUMMARIES, JSON.stringify(allLocal));
 }
 
@@ -1159,3 +1348,99 @@ export async function deleteRoomCompetitionBonus(roomId: string, dateOrWeek: str
     console.warn('Error deleting room bonus from localStorage:', e);
   }
 }
+
+/**
+ * Đồng bộ toàn bộ dữ liệu phòng ở và điểm danh lưu tạm sang máy chủ Firestore.
+ * Giúp giải quyết triệt để vấn đề danh sách từng phòng không đồng bộ khi chia sẻ.
+ */
+export async function syncPendingLocalDataToServer(): Promise<{ syncedAttendance: number; syncedSummaries: number }> {
+  let syncedAttendance = 0;
+  let syncedSummaries = 0;
+
+  try {
+    // 1. Đồng bộ điểm danh ngày (GVCN / Ca trực phòng)
+    const localAttStr = localStorage.getItem(LOCAL_STORAGE_KEY_ATTENDANCE);
+    if (localAttStr) {
+      const allLocal: Record<string, Record<string, AttendanceRecord>> = JSON.parse(localAttStr);
+      for (const date of Object.keys(allLocal)) {
+        const records = Object.values(allLocal[date]);
+        if (records.length > 0) {
+          const promises = records.map(rec => {
+            const docId = `${rec.date}_${rec.studentId}`;
+            return setDoc(doc(db, ATTENDANCE_COL, docId), {
+              ...rec,
+              id: docId,
+              recordedAt: rec.recordedAt || new Date().toISOString(),
+            });
+          });
+          await Promise.all(promises);
+          syncedAttendance += records.length;
+        }
+      }
+    }
+
+    // 2. Đồng bộ báo cáo tổng hợp phòng ngày
+    const localSumStr = localStorage.getItem(LOCAL_STORAGE_KEY_SUMMARIES);
+    if (localSumStr) {
+      const allLocal: Record<string, Record<string, RoomSummary>> = JSON.parse(localSumStr);
+      for (const date of Object.keys(allLocal)) {
+        const summaries = Object.values(allLocal[date]);
+        for (const s of summaries) {
+          const normalizedRoom = OLD_FEMALE_ROOM_NAME_MAP[s.roomId] || s.roomId;
+          const docId = `${s.date}_${normalizedRoom.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+          await setDoc(doc(db, ROOM_SUMMARIES_COL, docId), {
+            ...s,
+            roomId: normalizedRoom,
+            id: docId,
+            updatedAt: s.updatedAt || new Date().toISOString(),
+          });
+          syncedSummaries++;
+        }
+      }
+    }
+
+    // 3. Đồng bộ điểm danh tự học đêm
+    const localNightAttStr = localStorage.getItem(LOCAL_STORAGE_KEY_NIGHT_ATTENDANCE);
+    if (localNightAttStr) {
+      const allLocal: Record<string, Record<string, NightStudyRecord>> = JSON.parse(localNightAttStr);
+      for (const date of Object.keys(allLocal)) {
+        const records = Object.values(allLocal[date]);
+        if (records.length > 0) {
+          const promises = records.map(rec => {
+            const docId = `${rec.date}_${rec.studentId}`;
+            return setDoc(doc(db, NIGHT_ATTENDANCE_COL, docId), {
+              ...rec,
+              id: docId,
+              recordedAt: rec.recordedAt || new Date().toISOString(),
+            });
+          });
+          await Promise.all(promises);
+        }
+      }
+    }
+
+    // 4. Đồng bộ tổng hợp phòng tự học đêm
+    const localNightSumStr = localStorage.getItem(LOCAL_STORAGE_KEY_NIGHT_SUMMARIES);
+    if (localNightSumStr) {
+      const allLocal: Record<string, Record<string, NightRoomSummary>> = JSON.parse(localNightSumStr);
+      for (const date of Object.keys(allLocal)) {
+        const summaries = Object.values(allLocal[date]);
+        for (const s of summaries) {
+          const normalizedRoom = OLD_FEMALE_ROOM_NAME_MAP[s.roomId] || s.roomId;
+          const docId = `${s.date}_${normalizedRoom.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+          await setDoc(doc(db, NIGHT_SUMMARIES_COL, docId), {
+            ...s,
+            roomId: normalizedRoom,
+            id: docId,
+            updatedAt: s.updatedAt || new Date().toISOString(),
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Sync pending local data to Firestore error:', err);
+  }
+
+  return { syncedAttendance, syncedSummaries };
+}
+

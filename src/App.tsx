@@ -52,7 +52,14 @@ import {
   deleteMultipleRoomConfigs,
   resetRoomConfigs,
   clearAllStudents,
-  saveStudentsBatch
+  saveStudentsBatch,
+  subscribeToStudents,
+  subscribeToRoomConfigs,
+  subscribeToAttendanceForDate,
+  subscribeToRoomSummaries,
+  subscribeToNightAttendanceForDate,
+  subscribeToNightRoomSummaries,
+  syncPendingLocalDataToServer
 } from './services/dataService';
 import { Header } from './components/Header';
 import { StatSummaryCards } from './components/StatSummaryCards';
@@ -103,6 +110,11 @@ export default function App() {
       return null;
     }
   });
+
+  // Shared room param from URL: e.g. ?room=Phòng%20Nam%2001
+  const [sharedRoomParam, setSharedRoomParam] = useState<string>('ALL');
+  const [serverSyncStatus, setServerSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
+  const [lastSyncedTime, setLastSyncedTime] = useState<string>('');
 
   // App data states (Day Attendance)
   const [students, setStudents] = useState<Student[]>([]);
@@ -162,9 +174,28 @@ export default function App() {
   // Demo guest mode bypass for convenience if user wants to evaluate immediately
   const [guestMode, setGuestMode] = useState<boolean>(false);
 
-  // Test connection on boot & auth listener
+  // Test connection on boot & check URL search params & auth listener
   useEffect(() => {
     testFirestoreConnection();
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlDate = params.get('date');
+      const urlTab = params.get('tab');
+      const urlRoom = params.get('room');
+
+      if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) {
+        setCurrentDate(urlDate);
+      }
+      if (urlTab && ['attendance', 'night_study', 'competition', 'room_duty', 'report', 'students', 'permissions'].includes(urlTab)) {
+        setActiveTab(urlTab as any);
+      }
+      if (urlRoom && urlRoom.trim()) {
+        setSharedRoomParam(urlRoom.trim());
+      }
+    } catch (e) {
+      console.warn('URL parsing error:', e);
+    }
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -174,21 +205,19 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Load authorized users, students, and room configs on startup
+  // Load authorized users and sync any pending offline local data to server on startup
   useEffect(() => {
     async function loadInitialData() {
       setLoadingData(true);
       try {
-        const [users, studentList, configs] = await Promise.all([
-          fetchAuthorizedUsers(),
-          fetchStudents(),
-          fetchRoomConfigs(),
-        ]);
+        const users = await fetchAuthorizedUsers();
         setAuthorizedUsers(users);
-        setStudents(studentList);
-        if (configs && configs.length > 0) {
-          setRoomConfigs(configs);
-        }
+
+        // Auto sync pending offline records to Firestore server
+        setServerSyncStatus('syncing');
+        await syncPendingLocalDataToServer();
+        setServerSyncStatus('synced');
+        setLastSyncedTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
       } catch (err) {
         console.error('Error loading initial data:', err);
       } finally {
@@ -199,27 +228,76 @@ export default function App() {
     loadInitialData();
   }, []);
 
-  // Load day attendance, night attendance and summaries when date changes
+  // Real-time subscription for students and room configs
   useEffect(() => {
-    async function loadDailyData() {
-      try {
-        const [attMap, summaries, nightAtt, nightSum] = await Promise.all([
-          fetchAttendanceForDate(currentDate),
-          fetchRoomSummaries(currentDate),
-          fetchNightAttendanceForDate(currentDate),
-          fetchNightRoomSummaries(currentDate),
-        ]);
-        setAttendanceMap(attMap);
-        setRoomSummaries(summaries);
-        setNightAttendanceMap(nightAtt);
-        setNightRoomSummaries(nightSum);
-      } catch (err) {
-        console.error('Error loading daily and night attendance:', err);
-      }
-    }
+    const unsubStudents = subscribeToStudents((list) => {
+      setStudents(list);
+      setLoadingData(false);
+    });
 
-    loadDailyData();
+    const unsubRooms = subscribeToRoomConfigs((configs) => {
+      if (configs && configs.length > 0) {
+        setRoomConfigs(configs);
+      }
+    });
+
+    return () => {
+      unsubStudents();
+      unsubRooms();
+    };
+  }, []);
+
+  // Real-time subscription for day and night attendance & summaries for selected date
+  useEffect(() => {
+    setServerSyncStatus('syncing');
+
+    const unsubAttendance = subscribeToAttendanceForDate(currentDate, (map) => {
+      setAttendanceMap(map);
+      setServerSyncStatus('synced');
+      setLastSyncedTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+    });
+
+    const unsubSummaries = subscribeToRoomSummaries(currentDate, (map) => {
+      setRoomSummaries(map);
+    });
+
+    const unsubNightAtt = subscribeToNightAttendanceForDate(currentDate, (map) => {
+      setNightAttendanceMap(map);
+    });
+
+    const unsubNightSum = subscribeToNightRoomSummaries(currentDate, (map) => {
+      setNightRoomSummaries(map);
+    });
+
+    return () => {
+      unsubAttendance();
+      unsubSummaries();
+      unsubNightAtt();
+      unsubNightSum();
+    };
   }, [currentDate]);
+
+  const handleForceSyncToServer = async () => {
+    setServerSyncStatus('syncing');
+    try {
+      await syncPendingLocalDataToServer();
+      const [attMap, summaries, nightAtt, nightSum] = await Promise.all([
+        fetchAttendanceForDate(currentDate),
+        fetchRoomSummaries(currentDate),
+        fetchNightAttendanceForDate(currentDate),
+        fetchNightRoomSummaries(currentDate),
+      ]);
+      setAttendanceMap(attMap);
+      setRoomSummaries(summaries);
+      setNightAttendanceMap(nightAtt);
+      setNightRoomSummaries(nightSum);
+      setServerSyncStatus('synced');
+      setLastSyncedTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+    } catch (err) {
+      console.warn('Manual sync error:', err);
+      setServerSyncStatus('synced');
+    }
+  };
 
   // Find authorized user info for current logged in user
   const authorizedInfo = useMemo<AuthorizedUser | null>(() => {
@@ -448,6 +526,10 @@ export default function App() {
   const handleClearAllStudents = async () => {
     await clearAllStudents();
     setStudents([]);
+    setAttendanceMap({});
+    setRoomSummaries({});
+    setNightAttendanceMap({});
+    setNightRoomSummaries({});
   };
 
   const handleSaveBatchStudents = async (newStudents: Student[], replaceRoom?: string) => {
@@ -538,20 +620,7 @@ export default function App() {
   };
 
   const handleResetSeedData = async () => {
-    localStorage.removeItem('qlnt_students_v1');
-    const newStudents: Student[] = [];
-    for (let i = 0; i < SEED_STUDENTS.length; i++) {
-      const item = SEED_STUDENTS[i];
-      const studentId = `hs_${String(i + 1).padStart(3, '0')}`;
-      const s: Student = {
-        ...item,
-        id: studentId,
-        createdAt: new Date().toISOString(),
-      };
-      await saveStudent(s);
-      newStudents.push(s);
-    }
-    setStudents(newStudents);
+    await handleClearAllStudents();
   };
 
   const handleSaveUser = async (user: AuthorizedUser) => {
@@ -587,6 +656,9 @@ export default function App() {
         onLogout={handleLogout}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        serverSyncStatus={serverSyncStatus}
+        lastSyncedTime={lastSyncedTime}
+        onForceSync={handleForceSyncToServer}
       />
 
       {/* Main Content Area */}
@@ -740,6 +812,8 @@ export default function App() {
             onClearStatusFilter={() => setSelectedStatusFilter('all')}
             roomSummaries={roomSummaries}
             onSaveRoomSummary={handleSaveRoomSummary}
+            initialRoom={sharedRoomParam}
+            onForceSyncToServer={handleForceSyncToServer}
           />
         )}
 
@@ -756,6 +830,8 @@ export default function App() {
             nightAttendanceMap={nightAttendanceMap}
             nightRoomSummaries={nightRoomSummaries}
             onSaveNightAttendance={handleSaveNightAttendance}
+            initialRoom={sharedRoomParam}
+            onForceSyncToServer={handleForceSyncToServer}
           />
         )}
 
@@ -792,6 +868,8 @@ export default function App() {
             roomSummaries={roomSummaries}
             onSaveRoomSummary={handleSaveRoomSummary}
             roomConfigs={roomConfigs}
+            initialRoom={sharedRoomParam}
+            onForceSyncToServer={handleForceSyncToServer}
           />
         )}
 

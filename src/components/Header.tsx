@@ -13,7 +13,9 @@ import {
   QrCode,
   Moon,
   Trophy,
-  BedDouble
+  BedDouble,
+  CloudCheck,
+  RefreshCw
 } from 'lucide-react';
 import { AuthorizedUser } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -30,6 +32,9 @@ interface HeaderProps {
   onLogout: () => void;
   activeTab: 'attendance' | 'night_study' | 'competition' | 'room_duty' | 'report' | 'students' | 'permissions';
   onTabChange: (tab: 'attendance' | 'night_study' | 'competition' | 'room_duty' | 'report' | 'students' | 'permissions') => void;
+  serverSyncStatus?: 'synced' | 'syncing' | 'offline';
+  lastSyncedTime?: string;
+  onForceSync?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -44,6 +49,9 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   activeTab,
   onTabChange,
+  serverSyncStatus = 'synced',
+  lastSyncedTime,
+  onForceSync,
 }) => {
   return (
     <header className="bg-gradient-to-r from-emerald-800 via-teal-800 to-cyan-900 text-white shadow-lg sticky top-0 z-40">
@@ -83,6 +91,31 @@ export const Header: React.FC<HeaderProps> = ({
               onChange={(e) => onDateChange(e.target.value)}
               className="bg-transparent text-white font-medium text-xs sm:text-sm focus:outline-none cursor-pointer"
             />
+          </div>
+
+          {/* Server Real-time Sync Status Badge */}
+          <div 
+            onClick={onForceSync}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border backdrop-blur-sm cursor-pointer transition select-none shadow-xs ${
+              serverSyncStatus === 'syncing'
+                ? 'bg-amber-900/60 border-amber-500/50 text-amber-200'
+                : serverSyncStatus === 'offline'
+                ? 'bg-rose-900/60 border-rose-500/50 text-rose-200'
+                : 'bg-emerald-900/60 border-emerald-500/50 text-emerald-200 hover:bg-emerald-800/80'
+            }`}
+            title="Trạng thái kết nối máy chủ Firestore. Bấm vào để kích hoạt đồng bộ lại dữ liệu tức thì."
+          >
+            {serverSyncStatus === 'syncing' ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-300" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+            )}
+            <span className="hidden sm:inline">
+              {serverSyncStatus === 'syncing' ? 'Đang đồng bộ...' : 'Máy chủ: Đã đồng bộ'}
+            </span>
+            {lastSyncedTime && serverSyncStatus === 'synced' && (
+              <span className="text-[10px] text-emerald-300/80 hidden md:inline">({lastSyncedTime})</span>
+            )}
           </div>
 
           {/* User Account / Login */}

@@ -2,28 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny
+    // Default deny for unspecified collections
     match /{document=**} {
       allow read, write: if false;
-    }
-
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isInitialAdmin() {
-      return isSignedIn() && 
-        (request.auth.token.email == 'nghiatrabui.nbk@gmail.com' ||
-         (request.auth.token.email_verified == true && request.auth.token.email == 'nghiatrabui.nbk@gmail.com'));
-    }
-
-    function isAuthorizedUser() {
-      return isSignedIn() && (
-        isInitialAdmin() ||
-        exists(/databases/$(database)/documents/authorized_users/$(request.auth.uid)) ||
-        exists(/databases/$(database)/documents/authorized_users/$(request.auth.token.email))
-      );
     }
 
     // Connection testing doc
@@ -33,73 +14,76 @@ service cloud.firestore {
 
     // Authorized users list
     match /authorized_users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isInitialAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow read: if true;
+      allow write: if true;
     }
 
-    // Students collection
+    // Students collection - allows read and write for real-time synchronization across devices and shared links
     match /students/{studentId} {
-      allow read: if isAuthorizedUser();
-      allow create, update: if isAuthorizedUser();
-      allow delete: if isAuthorizedUser();
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
     }
 
-    // Attendance records
+    // Attendance records (Day Attendance / GVCN)
     match /attendance_records/{recordId} {
-      allow read: if isAuthorizedUser();
-      allow create, update: if isAuthorizedUser();
-      allow delete: if isAuthorizedUser();
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
     }
 
     // Room summaries
     match /room_summaries/{summaryId} {
-      allow read: if isAuthorizedUser();
-      allow create, update: if isAuthorizedUser();
-      allow delete: if isAuthorizedUser();
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
     }
 
     // Night study attendance records (Independent)
     match /night_study_attendance/{recordId} {
-      allow read: if isAuthorizedUser();
-      allow create, update: if isAuthorizedUser();
-      allow delete: if isAuthorizedUser();
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
     }
 
     // Night study room summaries
     match /night_room_summaries/{summaryId} {
-      allow read: if isAuthorizedUser();
-      allow create, update: if isAuthorizedUser();
-      allow delete: if isAuthorizedUser();
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if true;
     }
 
     // School config
     match /school_config/{configId} {
-      allow read: if isSignedIn();
-      allow write: if isAuthorizedUser();
+      allow read, write: if true;
     }
 
     // Room configs
     match /room_configs/{configId} {
-      allow read: if isAuthorizedUser();
-      allow create, update, delete: if isAuthorizedUser();
+      allow read, write: if true;
     }
 
     // Competition criteria & departments
     match /competition_criteria/{criterionId} {
-      allow read: if isSignedIn() || isAuthorizedUser();
-      allow create, update, delete: if isAuthorizedUser();
+      allow read, write: if true;
     }
 
     match /competition_departments/{deptId} {
-      allow read: if isSignedIn() || isAuthorizedUser();
-      allow create, update, delete: if isAuthorizedUser();
+      allow read, write: if true;
     }
 
     // Competition room evaluations
     match /competition_evaluations/{evaluationId} {
-      allow read: if isSignedIn() || isAuthorizedUser();
-      allow create, update: if isSignedIn() || isAuthorizedUser();
-      allow delete: if isAuthorizedUser();
+      allow read, write: if true;
+    }
+
+    // Competition deduction rules & room bonuses
+    match /competition_deduction_rules/{ruleId} {
+      allow read, write: if true;
+    }
+
+    match /competition_room_bonuses/{bonusId} {
+      allow read, write: if true;
     }
   }
 }

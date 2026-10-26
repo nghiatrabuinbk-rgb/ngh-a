@@ -24,7 +24,9 @@ import {
   RotateCcw,
   Calendar,
   Layers,
-  HeartHandshake
+  HeartHandshake,
+  Share2,
+  RefreshCw
 } from 'lucide-react';
 import { 
   Student, 
@@ -35,6 +37,7 @@ import {
   AuthorizedUser,
   RoomConfig 
 } from '../types';
+import { ShareRoomAttendanceModal } from './ShareRoomAttendanceModal';
 
 interface RoomDutyAttendanceViewProps {
   currentDate: string;
@@ -51,6 +54,8 @@ interface RoomDutyAttendanceViewProps {
   roomSummaries: Record<string, RoomSummary>;
   onSaveRoomSummary: (summary: RoomSummary) => Promise<void>;
   roomConfigs?: RoomConfig[];
+  initialRoom?: string;
+  onForceSyncToServer?: () => Promise<void>;
 }
 
 export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
@@ -68,8 +73,15 @@ export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
   roomSummaries,
   onSaveRoomSummary,
   roomConfigs = [],
+  initialRoom,
+  onForceSyncToServer,
 }) => {
-  const [selectedRoom, setSelectedRoom] = useState<string>('ALL');
+  const [selectedRoom, setSelectedRoom] = useState<string>(() => {
+    if (initialRoom && initialRoom.trim() && initialRoom !== 'ALL') {
+      return initialRoom.trim();
+    }
+    return 'ALL';
+  });
   const [selectedGenderZone, setSelectedGenderZone] = useState<'all' | 'nam' | 'nu' | 'assigned'>('all');
   const [selectedClass, setSelectedClass] = useState<string>('ALL');
   const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
@@ -79,6 +91,15 @@ export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
   const [copiedZalo, setCopiedZalo] = useState<boolean>(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareTargetRoom, setShareTargetRoom] = useState<string>('ALL');
+
+  // Sync initialRoom when prop updates
+  useEffect(() => {
+    if (initialRoom && initialRoom.trim() && initialRoom !== 'ALL') {
+      setSelectedRoom(initialRoom.trim());
+    }
+  }, [initialRoom]);
 
   // Local draft state for attendance
   const [draftAttendance, setDraftAttendance] = useState<Record<string, AttendanceRecord>>({});
@@ -214,7 +235,7 @@ export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
       if (rec?.stayWeekend) stayWeekend++;
     });
 
-    const attendanceRate = total > 0 ? ((present / total) * 100).toFixed(1) : '100';
+    const attendanceRate = total > 0 ? ((present / total) * 100).toFixed(1) : '0.0';
 
     return {
       total,
@@ -544,8 +565,20 @@ export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
           </div>
 
           <button
+            onClick={() => {
+              setShareTargetRoom(selectedRoom);
+              setIsShareModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow transition border border-emerald-400 cursor-pointer"
+            title="Chia sẻ link trực tiếp và mã QR điểm danh của phòng này để đồng bộ lên máy chủ"
+          >
+            <Share2 className="w-4 h-4 text-amber-300" />
+            <span>Chia sẻ điểm danh phòng</span>
+          </button>
+
+          <button
             onClick={handleCopyZaloSummary}
-            className="flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow transition border border-blue-400"
+            className="flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow transition border border-blue-400 cursor-pointer"
             title="Sao chép báo cáo ngắn gọn ca trực để dán vào nhóm Zalo"
           >
             {copiedZalo ? <CheckCheck className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
@@ -1235,6 +1268,21 @@ export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
           <span>{isSaving ? 'Đang lưu...' : 'Lưu Điểm Danh Trực Phòng'}</span>
         </button>
       </div>
+
+      {/* Share Room Attendance Modal */}
+      <ShareRoomAttendanceModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        room={shareTargetRoom}
+        currentDate={currentDate}
+        tabType="room_duty"
+        roomStudents={
+          shareTargetRoom === 'ALL'
+            ? students.filter((s) => s.status === 'active')
+            : students.filter((s) => s.room === shareTargetRoom && s.status === 'active')
+        }
+        onForceSyncToServer={onForceSyncToServer}
+      />
     </div>
   );
 };

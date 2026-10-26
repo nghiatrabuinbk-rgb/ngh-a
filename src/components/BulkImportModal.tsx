@@ -10,7 +10,11 @@ import {
   Sparkles, 
   Layers, 
   ArrowRight,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Edit3,
+  GraduationCap,
+  MapPin,
+  Home
 } from 'lucide-react';
 import { Student, RoomConfig } from '../types';
 
@@ -63,10 +67,15 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const [defaultClass, setDefaultClass] = useState<string>(classes[0] || '6A');
   const [defaultVillage, setDefaultVillage] = useState<string>(villages[0] || 'Thôn 1');
   const [defaultHamlet, setDefaultHamlet] = useState<string>(hamlets[0] || 'Nóc Tăk Pổ');
+  const [rowOverrides, setRowOverrides] = useState<Record<number, Partial<ParsedRow>>>({});
   const [autoAssignBeds, setAutoAssignBeds] = useState<boolean>(true);
   const [importMode, setImportMode] = useState<'replace' | 'append'>('replace');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+
+  React.useEffect(() => {
+    setRowOverrides({});
+  }, [rawText, defaultClass, defaultVillage, defaultHamlet]);
 
   // Find room configuration
   const currentRoomConfig = useMemo(() => {
@@ -173,21 +182,27 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     setIsSubmitting(true);
     try {
       const timestamp = Date.now();
-      const newStudents: Student[] = parsedRows.map((r, i) => ({
-        id: `hs_${timestamp}_${i + 1}`,
-        name: r.name,
-        gender: r.gender,
-        dob: '2012-01-01',
-        room: selectedRoom,
-        bedNumber: r.bedNumber || `Giường ${String(i + 1).padStart(2, '0')}`,
-        class: r.className,
-        village: r.village,
-        hamlet: r.hamlet,
-        ethnicity: 'Ca Dong',
-        notes: r.notes || '',
-        status: 'active',
-        createdAt: new Date().toISOString(),
-      }));
+      const newStudents: Student[] = parsedRows.map((r, i) => {
+        const effective = {
+          ...r,
+          ...(rowOverrides[i] || {}),
+        };
+        return {
+          id: `hs_${timestamp}_${i + 1}`,
+          name: effective.name,
+          gender: effective.gender,
+          dob: '2012-01-01',
+          room: selectedRoom,
+          bedNumber: effective.bedNumber || `Giường ${String(i + 1).padStart(2, '0')}`,
+          class: effective.className,
+          village: effective.village,
+          hamlet: effective.hamlet,
+          ethnicity: 'Ca Dong',
+          notes: effective.notes || '',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+        };
+      });
 
       await onSaveBatch(newStudents, importMode === 'replace' ? selectedRoom : undefined);
 
@@ -274,55 +289,115 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                2. Lớp mặc định (nếu dán thiếu lớp):
-              </label>
-              <select
-                value={defaultClass}
-                onChange={(e) => setDefaultClass(e.target.value)}
-                className="w-full text-xs font-bold bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-              >
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>2. Lớp mặc định:</span>
+                </label>
+                <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  Tùy chọn chỉnh sửa
+                </span>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  list="bulk-classes-list"
+                  value={defaultClass}
+                  onChange={(e) => setDefaultClass(e.target.value)}
+                  placeholder="Gõ hoặc chọn lớp (VD: 6A, 7/1...)"
+                  className="w-full text-xs font-bold bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                />
+                <datalist id="bulk-classes-list">
+                  {classes.map((c) => (
+                    <option key={c} value={c}>
+                      Lớp {c}
+                    </option>
+                  ))}
+                </datalist>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1.5">
                 {classes.map((c) => (
-                  <option key={c} value={c}>
-                    Lớp {c}
-                  </option>
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setDefaultClass(c)}
+                    className={`text-[10px] px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                      defaultClass === c
+                        ? 'bg-emerald-700 text-white border-emerald-800 font-bold shadow-2xs'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {c}
+                  </button>
                 ))}
-              </select>
+              </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Nếu dòng có ghi lớp (ví dụ: Lê Văn A	7A) thì hệ thống lấy lớp 7A.
+                Tự do gõ lớp mới hoặc chọn gợi ý. Nếu dòng dán có ghi lớp (ví dụ: Lê Văn A 7A) sẽ lấy theo lớp của dòng đó.
               </p>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                3. Thôn & Nóc mặc định:
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>3. Thôn & Nóc mặc định:</span>
+                </label>
+                <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  Tùy chọn chỉnh sửa
+                </span>
+              </div>
               <div className="grid grid-cols-2 gap-1.5">
-                <select
-                  value={defaultVillage}
-                  onChange={(e) => setDefaultVillage(e.target.value)}
-                  className="w-full text-[11px] font-semibold bg-white border border-slate-300 rounded-xl px-2 py-2 text-slate-800"
-                >
-                  {villages.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={defaultHamlet}
-                  onChange={(e) => setDefaultHamlet(e.target.value)}
-                  className="w-full text-[11px] font-semibold bg-white border border-slate-300 rounded-xl px-2 py-2 text-slate-800"
-                >
-                  {hamlets.map((h) => (
-                    <option key={h} value={h}>
-                      {h}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Thôn cư trú:</label>
+                  <input
+                    type="text"
+                    list="bulk-villages-list"
+                    value={defaultVillage}
+                    onChange={(e) => setDefaultVillage(e.target.value)}
+                    placeholder="Gõ hoặc chọn Thôn..."
+                    className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                  />
+                  <datalist id="bulk-villages-list">
+                    {villages.map((v) => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-purple-700 block mb-0.5">Nóc (bản):</label>
+                  <input
+                    type="text"
+                    list="bulk-hamlets-list"
+                    value={defaultHamlet}
+                    onChange={(e) => setDefaultHamlet(e.target.value)}
+                    placeholder="Gõ hoặc chọn Nóc..."
+                    className="w-full text-xs font-semibold bg-white border border-purple-200 rounded-xl px-2.5 py-2 text-purple-950 focus:outline-hidden focus:ring-2 focus:ring-purple-500 shadow-2xs"
+                  />
+                  <datalist id="bulk-hamlets-list">
+                    {hamlets.map((h) => (
+                      <option key={h} value={h} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {villages.slice(0, 5).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setDefaultVillage(v)}
+                    className={`text-[9px] px-1.5 py-0.5 rounded border transition cursor-pointer ${
+                      defaultVillage === v
+                        ? 'bg-slate-700 text-white border-slate-800 font-bold'
+                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Tự gán thôn/nóc ban đầu cho cả đợt nhập
+                Tự do gõ tên thôn/nóc mới bất kỳ hoặc bấm chọn gợi ý cho toàn bộ đợt dán.
               </p>
             </div>
           </div>
@@ -452,39 +527,93 @@ Hồ Văn Hùng	8A`}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {parsedRows.map((r, i) => (
-                      <tr key={i} className="hover:bg-slate-50/80">
-                        <td className="py-1.5 px-3 text-center text-slate-400 font-mono text-[11px]">
-                          {i + 1}
-                        </td>
-                        <td className="py-1.5 px-3 font-bold text-slate-900">{r.name}</td>
-                        <td className="py-1.5 px-3 text-center">
-                          <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md text-[11px]">
-                            {r.className}
-                          </span>
-                        </td>
-                        <td className="py-1.5 px-3 text-center">
-                          <span
-                            className={`font-semibold text-[11px] px-2 py-0.5 rounded-full ${
-                              r.gender === 'Nam'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {r.gender}
-                          </span>
-                        </td>
-                        <td className="py-1.5 px-3 text-center text-slate-700 font-medium">
-                          {selectedRoom}
-                        </td>
-                        <td className="py-1.5 px-3 text-center text-emerald-700 font-bold font-mono">
-                          {r.bedNumber || 'Chưa gán'}
-                        </td>
-                        <td className="py-1.5 px-3 text-slate-600">
-                          {r.village} - {r.hamlet}
-                        </td>
-                      </tr>
-                    ))}
+                    {parsedRows.map((r, i) => {
+                      const eff = { ...r, ...(rowOverrides[i] || {}) };
+                      return (
+                        <tr key={i} className="hover:bg-slate-50/80">
+                          <td className="py-1.5 px-3 text-center text-slate-400 font-mono text-[11px]">
+                            {i + 1}
+                          </td>
+                          <td className="py-1.5 px-3 font-bold text-slate-900">{eff.name}</td>
+                          <td className="py-1.5 px-3 text-center">
+                            <input
+                              type="text"
+                              list="bulk-classes-list"
+                              value={eff.className}
+                              onChange={(e) =>
+                                setRowOverrides((prev) => ({
+                                  ...prev,
+                                  [i]: { ...(prev[i] || {}), className: e.target.value },
+                                }))
+                              }
+                              className="w-16 text-center bg-white border border-slate-300 rounded-md py-0.5 text-xs font-bold text-emerald-800 shadow-2xs focus:ring-1 focus:ring-emerald-500"
+                            />
+                          </td>
+                          <td className="py-1.5 px-3 text-center">
+                            <select
+                              value={eff.gender}
+                              onChange={(e) =>
+                                setRowOverrides((prev) => ({
+                                  ...prev,
+                                  [i]: { ...(prev[i] || {}), gender: e.target.value as 'Nam' | 'Nữ' },
+                                }))
+                              }
+                              className="text-[11px] font-semibold rounded-md border border-slate-300 py-0.5 px-1 bg-white"
+                            >
+                              <option value="Nam">Nam</option>
+                              <option value="Nữ">Nữ</option>
+                            </select>
+                          </td>
+                          <td className="py-1.5 px-3 text-center text-slate-700 font-medium">
+                            {selectedRoom}
+                          </td>
+                          <td className="py-1.5 px-3 text-center text-emerald-700 font-bold font-mono">
+                            <input
+                              type="text"
+                              value={eff.bedNumber}
+                              onChange={(e) =>
+                                setRowOverrides((prev) => ({
+                                  ...prev,
+                                  [i]: { ...(prev[i] || {}), bedNumber: e.target.value },
+                                }))
+                              }
+                              className="w-20 text-center bg-white border border-slate-300 rounded-md py-0.5 text-xs font-mono font-bold text-emerald-800 shadow-2xs focus:ring-1 focus:ring-emerald-500"
+                            />
+                          </td>
+                          <td className="py-1.5 px-3 text-slate-600">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                list="bulk-villages-list"
+                                value={eff.village}
+                                onChange={(e) =>
+                                  setRowOverrides((prev) => ({
+                                    ...prev,
+                                    [i]: { ...(prev[i] || {}), village: e.target.value },
+                                  }))
+                                }
+                                placeholder="Thôn"
+                                className="w-20 bg-white border border-slate-300 rounded-md py-0.5 px-1 text-[11px] text-slate-800"
+                              />
+                              <span>-</span>
+                              <input
+                                type="text"
+                                list="bulk-hamlets-list"
+                                value={eff.hamlet}
+                                onChange={(e) =>
+                                  setRowOverrides((prev) => ({
+                                    ...prev,
+                                    [i]: { ...(prev[i] || {}), hamlet: e.target.value },
+                                  }))
+                                }
+                                placeholder="Nóc"
+                                className="w-24 bg-white border border-purple-200 rounded-md py-0.5 px-1 text-[11px] text-purple-950 font-medium"
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

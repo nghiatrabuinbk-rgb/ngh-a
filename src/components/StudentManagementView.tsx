@@ -480,31 +480,17 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
             </button>
           )}
 
-          {/* Xóa sạch danh sách cũ */}
+          {/* XÓA SẠCH TOÀN BỘ DANH SÁCH HỌC SINH */}
           {isAdmin && (
             <button
               onClick={() => setIsClearConfirmOpen(true)}
-              className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs px-3 py-2 rounded-xl border border-rose-300 transition"
-              title="Xóa toàn bộ danh sách học sinh cũ để nạp danh sách thực tế"
+              className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs sm:text-sm px-3.5 py-2 rounded-xl shadow-md border border-rose-500 transition transform active:scale-95 cursor-pointer"
+              title="Xóa toàn bộ học sinh cũ khỏi hệ thống để Quản trị viên nhập lại danh sách mới từ đầu"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Xóa Hết DS Cũ</span>
+              <Trash2 className="w-4 h-4 stroke-[2.5]" />
+              <span>Xóa Hết DS Học Sinh</span>
             </button>
           )}
-
-          {/* Khôi phục mẫu 25 phòng */}
-          <button
-            onClick={() => {
-              if (confirm('Khởi tạo lại danh sách 25 học sinh mẫu phân bổ vào 25 phòng chuẩn (12 nam, 13 nữ)?')) {
-                onResetSeedData();
-              }
-            }}
-            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold transition"
-            title="Nạp lại dữ liệu học sinh mẫu 25 phòng"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Nạp Mẫu</span>
-          </button>
         </div>
       </div>
 
@@ -1184,15 +1170,17 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
                                 setBulkImportTargetRoom(rooms[0] || 'Phòng Nam 01');
                                 setIsBulkImportOpen(true);
                               }}
-                              className="text-xs bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl hover:bg-emerald-800"
+                              className="text-xs bg-emerald-700 text-white font-bold px-3.5 py-1.5 rounded-xl hover:bg-emerald-800 transition shadow-xs cursor-pointer flex items-center gap-1.5"
                             >
-                              Dán học sinh từ Excel vào phòng
+                              <ClipboardPaste className="w-3.5 h-3.5" />
+                              <span>Dán học sinh từ Excel vào phòng</span>
                             </button>
                             <button
-                              onClick={onResetSeedData}
-                              className="text-xs bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-200"
+                              onClick={() => handleOpenAddModal()}
+                              className="text-xs bg-white text-emerald-800 font-bold px-3 py-1.5 rounded-xl border border-emerald-300 hover:bg-emerald-50 transition shadow-xs cursor-pointer flex items-center gap-1.5"
                             >
-                              Nạp dữ liệu mẫu 25 phòng
+                              <Plus className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>Thêm từng học sinh</span>
                             </button>
                           </div>
                         )}

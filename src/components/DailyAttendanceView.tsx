@@ -16,7 +16,8 @@ import {
   FileCheck2,
   Users,
   BedDouble,
-  UtensilsCrossed
+  UtensilsCrossed,
+  Share2
 } from 'lucide-react';
 import { 
   Student, 
@@ -26,6 +27,7 @@ import {
   RoomSummary, 
   AuthorizedUser 
 } from '../types';
+import { ShareRoomAttendanceModal } from './ShareRoomAttendanceModal';
 
 interface DailyAttendanceViewProps {
   currentDate: string;
@@ -42,6 +44,8 @@ interface DailyAttendanceViewProps {
   onClearStatusFilter: () => void;
   roomSummaries: Record<string, RoomSummary>;
   onSaveRoomSummary: (summary: RoomSummary) => Promise<void>;
+  initialRoom?: string;
+  onForceSyncToServer?: () => Promise<void>;
 }
 
 export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
@@ -59,14 +63,30 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
   onClearStatusFilter,
   roomSummaries,
   onSaveRoomSummary,
+  initialRoom,
+  onForceSyncToServer,
 }) => {
-  const [selectedRoom, setSelectedRoom] = useState<string>('ALL');
+  const [selectedRoom, setSelectedRoom] = useState<string>(() => {
+    if (initialRoom && initialRoom.trim() && initialRoom !== 'ALL') {
+      return initialRoom.trim();
+    }
+    return 'ALL';
+  });
   const [selectedClass, setSelectedClass] = useState<string>('ALL');
   const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
   const [selectedHamlet, setSelectedHamlet] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareTargetRoom, setShareTargetRoom] = useState<string>('ALL');
+
+  // Sync initialRoom when prop updates
+  React.useEffect(() => {
+    if (initialRoom && initialRoom.trim() && initialRoom !== 'ALL') {
+      setSelectedRoom(initialRoom.trim());
+    }
+  }, [initialRoom]);
 
   // Local draft state for quick in-memory changes before saving
   const [draftAttendance, setDraftAttendance] = useState<Record<string, AttendanceRecord>>({});
@@ -559,6 +579,18 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             )}
 
             <button
+              onClick={() => {
+                setShareTargetRoom(selectedRoom);
+                setIsShareModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 font-semibold text-xs sm:text-sm px-3 py-2 rounded-lg transition cursor-pointer"
+              title="Chia sẻ link và mã QR điểm danh của phòng này lên máy chủ"
+            >
+              <Share2 className="w-4 h-4 text-blue-600" />
+              <span>Chia sẻ phòng</span>
+            </button>
+
+            <button
               onClick={handleMarkAllPresent}
               className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-medium text-xs sm:text-sm px-3 py-2 rounded-lg transition"
               title="Đánh dấu tất cả học sinh đang hiển thị là Có mặt"
@@ -871,6 +903,21 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
           <span>{isSaving ? 'Đang lưu...' : 'Lưu Điểm Danh Ngày'}</span>
         </button>
       </div>
+
+      {/* Share Room Attendance Modal */}
+      <ShareRoomAttendanceModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        room={shareTargetRoom}
+        currentDate={currentDate}
+        tabType="attendance"
+        roomStudents={
+          shareTargetRoom === 'ALL'
+            ? students.filter((s) => s.status === 'active')
+            : students.filter((s) => s.room === shareTargetRoom && s.status === 'active')
+        }
+        onForceSyncToServer={onForceSyncToServer}
+      />
     </div>
   );
 };

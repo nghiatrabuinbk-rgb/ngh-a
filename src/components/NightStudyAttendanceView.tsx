@@ -20,7 +20,8 @@ import {
   Filter,
   Calendar,
   Layers,
-  Phone
+  Phone,
+  Share2
 } from 'lucide-react';
 import { 
   Student, 
@@ -32,6 +33,7 @@ import {
   NightAggregatedStats
 } from '../types';
 import { exportNightStudyToExcel, NightRoomStatsRow } from '../utils/exportNightReport';
+import { ShareRoomAttendanceModal } from './ShareRoomAttendanceModal';
 
 interface NightStudyAttendanceViewProps {
   currentDate: string;
@@ -44,6 +46,8 @@ interface NightStudyAttendanceViewProps {
   nightAttendanceMap: Record<string, NightStudyRecord>;
   nightRoomSummaries: Record<string, NightRoomSummary>;
   onSaveNightAttendance: (records: NightStudyRecord[], summary?: NightRoomSummary) => Promise<void>;
+  initialRoom?: string;
+  onForceSyncToServer?: () => Promise<void>;
 }
 
 export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> = ({
@@ -57,19 +61,36 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
   nightAttendanceMap,
   nightRoomSummaries,
   onSaveNightAttendance,
+  initialRoom,
+  onForceSyncToServer,
 }) => {
   // Navigation inside Night Study: Room Attendance vs Overall School Night Report
   const [nightSubView, setNightSubView] = useState<'attendance' | 'report'>('attendance');
 
   // Selected Room for Attendance
   const defaultRoom = rooms[0] || 'Phòng Nam 01';
-  const [selectedRoom, setSelectedRoom] = useState<string>(defaultRoom);
+  const [selectedRoom, setSelectedRoom] = useState<string>(() => {
+    if (initialRoom && initialRoom.trim() && initialRoom !== 'ALL') {
+      return initialRoom.trim();
+    }
+    return defaultRoom;
+  });
 
   // Local state for records in the current room
   const [roomRecords, setRoomRecords] = useState<Record<string, { status: NightStudyStatus; note: string }>>({});
   const [dutyNote, setDutyNote] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareTargetRoom, setShareTargetRoom] = useState<string>(selectedRoom);
+
+  // Sync initialRoom when prop updates
+  useEffect(() => {
+    if (initialRoom && initialRoom.trim() && initialRoom !== 'ALL') {
+      setSelectedRoom(initialRoom.trim());
+      setShareTargetRoom(initialRoom.trim());
+    }
+  }, [initialRoom]);
 
   // Search & filter for attendance list
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -403,6 +424,19 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
                 className="bg-transparent text-white font-bold text-xs sm:text-sm focus:outline-none cursor-pointer"
               />
             </div>
+
+            {/* Share Room Attendance Button */}
+            <button
+              onClick={() => {
+                setShareTargetRoom(selectedRoom);
+                setIsShareModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl shadow-lg transition transform active:scale-95 border border-blue-400 cursor-pointer"
+              title="Chia sẻ link trực tiếp và mã QR điểm danh tự học đêm phòng này lên máy chủ"
+            >
+              <Share2 className="w-4 h-4 text-amber-300" />
+              <span>Chia sẻ phòng</span>
+            </button>
 
             {/* Export Excel Button */}
             <button
@@ -960,6 +994,21 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
           </div>
         </div>
       )}
+
+      {/* Share Room Attendance Modal */}
+      <ShareRoomAttendanceModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        room={shareTargetRoom}
+        currentDate={currentDate}
+        tabType="night_study"
+        roomStudents={
+          shareTargetRoom === 'ALL'
+            ? students.filter((s) => s.status === 'active')
+            : students.filter((s) => s.room === shareTargetRoom && s.status === 'active')
+        }
+        onForceSyncToServer={onForceSyncToServer}
+      />
     </div>
   );
 };
