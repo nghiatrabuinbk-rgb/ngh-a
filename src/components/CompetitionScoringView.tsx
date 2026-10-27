@@ -40,8 +40,11 @@ import {
   ArrowUpDown,
   FileText,
   CheckCircle2,
-  RotateCcw
+  RotateCcw,
+  Video,
+  Play
 } from 'lucide-react';
+import { saveVideoEvidence, resolveVideoUrl, deleteVideoEvidence } from '../utils/videoStorage';
 import * as XLSX from 'xlsx';
 import { 
   CompetitionCriterion, 
@@ -149,6 +152,71 @@ function getWeekLabel(dateStr: string): string {
   }
 }
 
+// Component to render video evidence player with loading, thumbnail, full-screen and delete handlers
+const CriterionVideoPlayer: React.FC<{
+  videoUri: string;
+  title?: string;
+  onPreview: (resolvedUrl: string) => void;
+  onDelete?: () => void;
+}> = ({ videoUri, title, onPreview, onDelete }) => {
+  const [resolvedSrc, setResolvedSrc] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    resolveVideoUrl(videoUri).then((url) => {
+      if (isMounted) {
+        setResolvedSrc(url);
+        setIsLoading(false);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [videoUri]);
+
+  if (isLoading || !resolvedSrc) {
+    return (
+      <div className="relative rounded-xl border border-purple-200 bg-purple-50/50 aspect-video flex items-center justify-center p-2 text-xs text-purple-700">
+        <RefreshCw className="w-4 h-4 animate-spin text-purple-600 mr-1.5" />
+        <span>Đang nạp video...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group relative rounded-xl overflow-hidden border border-purple-200 bg-slate-950 aspect-video shadow-2xs flex flex-col justify-between">
+      <video
+        src={resolvedSrc}
+        controls
+        preload="metadata"
+        className="w-full h-full object-contain"
+        title={title || 'Video minh chứng'}
+      />
+      <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition flex items-center gap-1.5 pointer-events-auto bg-black/70 p-1 rounded-lg backdrop-blur-xs">
+        <button
+          type="button"
+          onClick={() => onPreview(resolvedSrc)}
+          className="p-1 bg-white/95 text-slate-900 rounded-md hover:bg-white cursor-pointer shadow-xs"
+          title="Xem phóng to toàn màn hình"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="p-1 bg-rose-600 text-white rounded-md hover:bg-rose-700 cursor-pointer shadow-xs"
+            title="Xóa video này"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
   currentDate,
   currentUser,
@@ -197,13 +265,17 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
   const [scores, setScores] = useState<Record<string, number>>({});
   const [criterionNotes, setCriterionNotes] = useState<Record<string, string>>({});
   const [criterionPhotos, setCriterionPhotos] = useState<Record<string, string[]>>({});
+  const [criterionVideos, setCriterionVideos] = useState<Record<string, string[]>>({});
   const [generalNote, setGeneralNote] = useState<string>('');
   const [evidencePhotos, setEvidencePhotos] = useState<string[]>([]);
+  const [evidenceVideos, setEvidenceVideos] = useState<string[]>([]);
+  const [uploadingCriterionVideo, setUploadingCriterionVideo] = useState<Record<string, boolean>>({});
   const [isSavingScore, setIsSavingScore] = useState<boolean>(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string>('');
 
-  // Photo Preview Modal
+  // Photo & Video Preview Modals
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  const [previewVideo, setPreviewVideo] = useState<{ url: string; title?: string } | null>(null);
 
   // Detail Modal for Room in Ranking
   const [detailRoomModal, setDetailRoomModal] = useState<RoomRankingResult | null>(null);
@@ -279,8 +351,10 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
       setScores({ ...existing.scores });
       setCriterionNotes({ ...(existing.notes || {}) });
       setCriterionPhotos({ ...(existing.criterionPhotos || {}) });
+      setCriterionVideos({ ...(existing.criterionVideos || {}) });
       setGeneralNote(existing.generalNote || '');
       setEvidencePhotos(existing.evidencePhotos || []);
+      setEvidenceVideos(existing.evidenceVideos || []);
       if (existing.departmentId) setSelectedDepartmentId(existing.departmentId);
       if (existing.evaluatorEmail) setEvaluatorEmail(existing.evaluatorEmail);
       if (existing.evaluatorName) setEvaluatorName(existing.evaluatorName);
@@ -295,8 +369,10 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
       setScores(initScores);
       setCriterionNotes(initNotes);
       setCriterionPhotos({});
+      setCriterionVideos({});
       setGeneralNote('');
       setEvidencePhotos([]);
+      setEvidenceVideos([]);
     }
   }, [selectedRoom, selectedDepartmentId, selectedDate, criteria, evaluations]);
 
@@ -407,6 +483,50 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
     }));
   };
 
+  // Upload video specifically for a criterion
+  const handleCriterionVideoUpload = async (
+    criterionId: string,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingCriterionVideo((prev) => ({ ...prev, [criterionId]: true }));
+    try {
+      const newVideos: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const videoUri = await saveVideoEvidence(file);
+        newVideos.push(videoUri);
+      }
+
+      if (newVideos.length > 0) {
+        setCriterionVideos((prev) => ({
+          ...prev,
+          [criterionId]: [...(prev[criterionId] || []), ...newVideos],
+        }));
+      }
+    } catch (err) {
+      console.error('Criterion video upload failed:', err);
+      alert('Không thể lưu video minh chứng. Vui lòng thử lại!');
+    } finally {
+      setUploadingCriterionVideo((prev) => ({ ...prev, [criterionId]: false }));
+      e.target.value = '';
+    }
+  };
+
+  // Remove video for a specific criterion
+  const handleRemoveCriterionVideo = async (criterionId: string, videoIndex: number) => {
+    const videoToRemove = criterionVideos[criterionId]?.[videoIndex];
+    if (videoToRemove) {
+      await deleteVideoEvidence(videoToRemove);
+    }
+    setCriterionVideos((prev) => ({
+      ...prev,
+      [criterionId]: (prev[criterionId] || []).filter((_, idx) => idx !== videoIndex),
+    }));
+  };
+
   // Save Evaluation Submission
   const handleSaveEvaluation = async () => {
     if (!selectedRoom) return;
@@ -437,6 +557,15 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
     });
     const allEvidencePhotos = Array.from(new Set([...evidencePhotos, ...allCritPhotos]));
 
+    // Collect all videos from each criterion into evidenceVideos
+    const allCritVideos: string[] = [];
+    Object.values(criterionVideos).forEach((vArr) => {
+      if (Array.isArray(vArr)) {
+        allCritVideos.push(...vArr);
+      }
+    });
+    const allEvidenceVideos = Array.from(new Set([...evidenceVideos, ...allCritVideos]));
+
     const newEval: CompetitionRoomEvaluation = {
       id: evalId,
       date: selectedDate,
@@ -451,7 +580,9 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
       notes: { ...criterionNotes },
       generalNote: generalNote.trim(),
       evidencePhotos: allEvidencePhotos,
+      evidenceVideos: allEvidenceVideos,
       criterionPhotos: { ...criterionPhotos },
+      criterionVideos: { ...criterionVideos },
       totalScore: avgScore,
       submitted: true,
       createdAt: new Date().toISOString(),
@@ -660,12 +791,15 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
           evaluatorName: latest.evaluatorName,
           totalScore: deptAvg,
           evidencePhotosCount: latest.evidencePhotos?.length || 0,
+          evidenceVideosCount: latest.evidenceVideos?.length || 0,
           submittedAt: latest.updatedAt || latest.createdAt,
           generalNote: latest.generalNote,
           scores: latest.scores,
           notes: latest.notes,
           evidencePhotos: latest.evidencePhotos,
+          evidenceVideos: latest.evidenceVideos,
           criterionPhotos: latest.criterionPhotos,
+          criterionVideos: latest.criterionVideos,
         });
       });
 
@@ -2296,7 +2430,7 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
                         <div className="pl-8 pt-1.5">
                           <div className="bg-amber-50/70 rounded-xl p-3 border border-amber-200/90 space-y-2.5">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <Camera className="w-4 h-4 text-amber-700" />
                                 <span className="text-xs font-bold text-slate-800">
                                   Minh chứng tiêu chí: {crit.name}
@@ -2306,10 +2440,15 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
                                     {criterionPhotos[crit.id]?.length} ảnh
                                   </span>
                                 )}
+                                {(criterionVideos[crit.id]?.length || 0) > 0 && (
+                                  <span className="text-[10px] bg-purple-200 text-purple-950 font-extrabold px-2 py-0.5 rounded-full border border-purple-300">
+                                    {criterionVideos[crit.id]?.length} video
+                                  </span>
+                                )}
                               </div>
 
-                              {/* Two Action Buttons: Chụp ảnh trực tiếp & Tải ảnh từ máy */}
-                              <div className="flex items-center gap-2">
+                              {/* Three Action Buttons: Chụp trực tiếp, Tải hình ảnh, Tải video */}
+                              <div className="flex items-center gap-2 flex-wrap">
                                 {/* Hidden Camera input for this criterion */}
                                 <input
                                   id={`camera-crit-${crit.id}`}
@@ -2347,48 +2486,112 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
                                   <Upload className="w-3.5 h-3.5 text-slate-600" />
                                   <span>Tải hình ảnh</span>
                                 </button>
+
+                                {/* Hidden Video File input for this criterion */}
+                                <input
+                                  id={`video-crit-${crit.id}`}
+                                  type="file"
+                                  accept="video/*"
+                                  multiple
+                                  className="hidden"
+                                  onChange={(e) => handleCriterionVideoUpload(crit.id, e)}
+                                />
+                                <button
+                                  type="button"
+                                  disabled={uploadingCriterionVideo[crit.id]}
+                                  onClick={() => document.getElementById(`video-crit-${crit.id}`)?.click()}
+                                  className="flex items-center gap-1.5 bg-purple-100 hover:bg-purple-200 active:scale-95 text-purple-950 font-bold text-xs px-3 py-1.5 rounded-lg transition border border-purple-300 shadow-2xs cursor-pointer disabled:opacity-50"
+                                  title={`Tải video minh chứng cho tiêu chí ${crit.name}`}
+                                >
+                                  {uploadingCriterionVideo[crit.id] ? (
+                                    <>
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-700" />
+                                      <span>Đang tải...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Video className="w-3.5 h-3.5 text-purple-700" />
+                                      <span>Tải video</span>
+                                    </>
+                                  )}
+                                </button>
                               </div>
                             </div>
 
                             {/* Photo Previews Grid for this criterion */}
-                            {criterionPhotos[crit.id] && criterionPhotos[crit.id].length > 0 ? (
-                              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 pt-1">
-                                {criterionPhotos[crit.id].map((photoUrl, pIdx) => (
-                                  <div
-                                    key={pIdx}
-                                    className="group relative rounded-xl overflow-hidden border border-amber-300 bg-white aspect-square shadow-2xs"
-                                  >
-                                    <img
-                                      src={photoUrl}
-                                      alt={`Minh chứng ${crit.name} ${pIdx + 1}`}
-                                      className="w-full h-full object-cover cursor-pointer"
-                                      onClick={() => setPreviewPhoto(photoUrl)}
-                                    />
-                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
-                                      <button
-                                        type="button"
+                            {criterionPhotos[crit.id] && criterionPhotos[crit.id].length > 0 && (
+                              <div className="space-y-1 pt-1">
+                                <span className="text-[11px] font-bold text-amber-900 block">
+                                  Ảnh minh chứng ({criterionPhotos[crit.id].length} ảnh):
+                                </span>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                                  {criterionPhotos[crit.id].map((photoUrl, pIdx) => (
+                                    <div
+                                      key={pIdx}
+                                      className="group relative rounded-xl overflow-hidden border border-amber-300 bg-white aspect-square shadow-2xs"
+                                    >
+                                      <img
+                                        src={photoUrl}
+                                        alt={`Minh chứng ${crit.name} ${pIdx + 1}`}
+                                        className="w-full h-full object-cover cursor-pointer"
                                         onClick={() => setPreviewPhoto(photoUrl)}
-                                        className="p-1.5 bg-white/90 text-slate-900 rounded-lg hover:bg-white cursor-pointer shadow-xs"
-                                        title="Xem ảnh phóng to"
-                                      >
-                                        <Maximize2 className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveCriterionPhoto(crit.id, pIdx)}
-                                        className="p-1.5 bg-rose-600 text-white rounded-lg hover:bg-rose-700 cursor-pointer shadow-xs"
-                                        title="Xóa ảnh này"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
+                                      />
+                                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewPhoto(photoUrl)}
+                                          className="p-1.5 bg-white/90 text-slate-900 rounded-lg hover:bg-white cursor-pointer shadow-xs"
+                                          title="Xem ảnh phóng to"
+                                        >
+                                          <Maximize2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveCriterionPhoto(crit.id, pIdx)}
+                                          className="p-1.5 bg-rose-600 text-white rounded-lg hover:bg-rose-700 cursor-pointer shadow-xs"
+                                          title="Xóa ảnh này"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
-                                ))}
+                                  ))}
+                                </div>
                               </div>
-                            ) : (
+                            )}
+
+                            {/* Video Previews Grid for this criterion */}
+                            {criterionVideos[crit.id] && criterionVideos[crit.id].length > 0 && (
+                              <div className="space-y-1.5 pt-2">
+                                <span className="text-[11px] font-bold text-purple-950 flex items-center gap-1.5">
+                                  <Video className="w-3.5 h-3.5 text-purple-700" />
+                                  Video minh chứng ({criterionVideos[crit.id].length} video):
+                                </span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                  {criterionVideos[crit.id].map((videoUri, vIdx) => (
+                                    <CriterionVideoPlayer
+                                      key={vIdx}
+                                      videoUri={videoUri}
+                                      title={`Minh chứng video ${crit.name} ${vIdx + 1}`}
+                                      onPreview={(resolvedUrl) =>
+                                        setPreviewVideo({
+                                          url: resolvedUrl,
+                                          title: `Video minh chứng: ${crit.name} (${selectedRoom})`,
+                                        })
+                                      }
+                                      onDelete={() => handleRemoveCriterionVideo(crit.id, vIdx)}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Empty state when neither photos nor videos */}
+                            {(!criterionPhotos[crit.id] || criterionPhotos[crit.id].length === 0) &&
+                            (!criterionVideos[crit.id] || criterionVideos[crit.id].length === 0) && (
                               <div className="text-[11px] text-amber-900/80 italic flex items-center gap-1.5 bg-white/60 p-2 rounded-lg border border-amber-200/50">
                                 <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                <span>Chưa có ảnh minh chứng cho tiêu chí này. Bấm <strong>Chụp trực tiếp</strong> hoặc <strong>Tải hình ảnh</strong> khi phát hiện lỗi hoặc cần lưu bằng chứng phòng ở.</span>
+                                <span>Chưa có ảnh hoặc video minh chứng cho tiêu chí này. Bấm <strong>Chụp trực tiếp</strong>, <strong>Tải hình ảnh</strong> hoặc <strong>Tải video</strong> khi phát hiện lỗi hoặc cần lưu bằng chứng phòng ở.</span>
                               </div>
                             )}
                           </div>
@@ -3160,10 +3363,10 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
                           </p>
                         )}
 
-                        {/* Criteria Breakdown & Photos for this department */}
+                        {/* Criteria Breakdown, Photos & Videos for this department */}
                         <div className="pt-2 border-t border-slate-200/80 space-y-2">
                           <span className="text-[11px] font-bold text-slate-700 block">
-                            Chi tiết điểm & ảnh minh chứng theo tiêu chí:
+                            Chi tiết điểm, ảnh & video minh chứng theo tiêu chí:
                           </span>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                             {criteria
@@ -3172,6 +3375,7 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
                                 const critScore = deptScore.scores?.[crit.id] ?? crit.standardPoints ?? 100;
                                 const critNote = deptScore.notes?.[crit.id];
                                 const critImgs = deptScore.criterionPhotos?.[crit.id] || [];
+                                const critVids = deptScore.criterionVideos?.[crit.id] || [];
 
                                 return (
                                   <div
@@ -3191,6 +3395,8 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
                                         Lỗi: {critNote}
                                       </p>
                                     )}
+
+                                    {/* Photos */}
                                     {critImgs.length > 0 && (
                                       <div className="flex items-center gap-1.5 overflow-x-auto pt-1">
                                         {critImgs.map((imgUrl, imgIdx) => (
@@ -3202,6 +3408,30 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
                                             className="w-12 h-12 object-cover rounded-md border border-slate-300 cursor-pointer hover:opacity-80 transition shrink-0"
                                             title="Bấm để xem ảnh to"
                                           />
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Videos */}
+                                    {critVids.length > 0 && (
+                                      <div className="flex items-center gap-1.5 overflow-x-auto pt-1">
+                                        {critVids.map((vidUri, vidIdx) => (
+                                          <button
+                                            key={vidIdx}
+                                            type="button"
+                                            onClick={async () => {
+                                              const resolved = await resolveVideoUrl(vidUri);
+                                              setPreviewVideo({
+                                                url: resolved,
+                                                title: `Video: ${crit.name} (${deptScore.departmentName})`,
+                                              });
+                                            }}
+                                            className="flex items-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 px-2 py-1 rounded-md text-[10px] font-bold shrink-0 cursor-pointer transition shadow-2xs"
+                                            title="Bấm để phát video"
+                                          >
+                                            <Play className="w-3 h-3 text-purple-700 fill-purple-700" />
+                                            <span>Video {vidIdx + 1}</span>
+                                          </button>
                                         ))}
                                       </div>
                                     )}
@@ -3226,6 +3456,34 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
                                   onClick={() => setPreviewPhoto(imgUrl)}
                                   className="w-16 h-16 object-cover rounded-lg border border-slate-300 cursor-pointer hover:opacity-80 transition shrink-0"
                                 />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Videos from this department */}
+                        {deptScore.evidenceVideos && deptScore.evidenceVideos.length > 0 && (
+                          <div className="pt-1">
+                            <span className="text-[11px] font-bold text-slate-500 block mb-1">
+                              Tất cả video minh chứng của ca chấm ({deptScore.evidenceVideos.length} video):
+                            </span>
+                            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                              {deptScore.evidenceVideos.map((vidUri, vi) => (
+                                <button
+                                  key={vi}
+                                  type="button"
+                                  onClick={async () => {
+                                    const resolved = await resolveVideoUrl(vidUri);
+                                    setPreviewVideo({
+                                      url: resolved,
+                                      title: `Video ca chấm: ${deptScore.departmentName} (${detailRoomModal.roomName})`,
+                                    });
+                                  }}
+                                  className="flex items-center gap-1.5 bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 px-2.5 py-1.5 rounded-lg text-xs font-bold shrink-0 cursor-pointer transition shadow-2xs"
+                                >
+                                  <Play className="w-3.5 h-3.5 text-purple-700 fill-purple-700" />
+                                  <span>Phát video {vi + 1}</span>
+                                </button>
                               ))}
                             </div>
                           </div>
@@ -3706,7 +3964,7 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-pointer"
           onClick={() => setPreviewPhoto(null)}
         >
-          <div className="relative max-w-3xl max-h-[90vh]">
+          <div className="relative max-w-3xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <img
               src={previewPhoto}
               alt="Ảnh phóng to minh chứng"
@@ -3714,10 +3972,61 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
             />
             <button
               onClick={() => setPreviewPhoto(null)}
-              className="absolute top-2 right-2 p-2 bg-black/60 text-white rounded-full hover:bg-black"
+              className="absolute top-2 right-2 p-2 bg-black/60 text-white rounded-full hover:bg-black cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* FULL VIDEO PREVIEW MODAL                                       */}
+      {/* ============================================================== */}
+      {previewVideo && (
+        <div
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-3 sm:p-6 cursor-pointer"
+          onClick={() => setPreviewVideo(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-slate-700 text-white">
+              <div className="flex items-center gap-2 min-w-0">
+                <Video className="w-4 h-4 text-purple-400 shrink-0" />
+                <span className="text-sm font-bold truncate">
+                  {previewVideo.title || 'Xem video minh chứng'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewVideo(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition cursor-pointer shrink-0"
+                title="Đóng video"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-2 sm:p-4 bg-black flex items-center justify-center max-h-[75vh]">
+              <video
+                src={previewVideo.url}
+                controls
+                autoPlay
+                className="max-w-full max-h-[70vh] rounded-lg shadow-lg"
+              />
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800/90 border-t border-slate-700 text-xs text-slate-300">
+              <span>Đang phát video minh chứng phòng ở</span>
+              <a
+                href={previewVideo.url}
+                download="minh-chung-video.mp4"
+                className="flex items-center gap-1 text-purple-300 hover:text-white underline font-semibold"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Tải về máy</span>
+              </a>
+            </div>
           </div>
         </div>
       )}

@@ -275,7 +275,9 @@ export interface CompetitionRoomEvaluation {
   notes?: Record<string, string>; // criterionId -> ghi chú vi phạm cụ thể
   generalNote?: string;
   evidencePhotos?: string[]; // Danh sách ảnh chụp minh chứng (base64 data URI)
+  evidenceVideos?: string[]; // Danh sách video minh chứng chung
   criterionPhotos?: Record<string, string[]>; // Danh sách ảnh minh chứng riêng cho từng tiêu chí { criterionId: [dataUrl, ...] }
+  criterionVideos?: Record<string, string[]>; // Danh sách video minh chứng riêng cho từng tiêu chí { criterionId: [videoUrl, ...] }
   totalScore: number; // Điểm trung bình thang 100 hoặc tổng điểm
   submitted: boolean;
   createdAt: string;
@@ -289,12 +291,15 @@ export interface DepartmentScoreSummary {
   evaluatorName: string;
   totalScore: number;
   evidencePhotosCount: number;
+  evidenceVideosCount?: number;
   submittedAt: string;
   generalNote?: string;
   scores: Record<string, number>;
   notes?: Record<string, string>;
   evidencePhotos?: string[];
+  evidenceVideos?: string[];
   criterionPhotos?: Record<string, string[]>;
+  criterionVideos?: Record<string, string[]>;
 }
 
 export interface CompetitionDeductionRules {
