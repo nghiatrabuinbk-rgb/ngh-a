@@ -62,10 +62,10 @@ const LOCAL_STORAGE_KEY_COMPETITION_RULES = 'qlnt_competition_rules_v1';
 const LOCAL_STORAGE_KEY_COMPETITION_BONUSES = 'qlnt_competition_bonuses_v1';
 const LOCAL_STORAGE_FLAG_CLEARED = 'qlnt_students_cleared_flag';
 
-// One-time client purge: ensure all previous mock students and old attendance records are wiped completely
+// One-time client purge: ensure all client devices wipe local students and attendance cache
 if (typeof window !== 'undefined') {
   try {
-    const PURGE_KEY = 'qlnt_purge_v6_zero_slate';
+    const PURGE_KEY = 'qlnt_purge_v8_clean_slate_all';
     if (!localStorage.getItem(PURGE_KEY)) {
       localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify([]));
       localStorage.setItem(LOCAL_STORAGE_KEY_ATTENDANCE, JSON.stringify({}));
@@ -89,29 +89,7 @@ export const DEFAULT_COMPETITION_DEDUCTION_RULES: CompetitionDeductionRules = {
 };
 
 // Bản đồ chuyển đổi số phòng khu Nữ từ 01..13 sang 13..25 theo yêu cầu người dùng
-export const OLD_FEMALE_ROOM_NAME_MAP: Record<string, string> = {
-  'Phòng Nữ 01': 'Phòng Nữ 13',
-  'Phòng Nữ 02': 'Phòng Nữ 14',
-  'Phòng Nữ 03': 'Phòng Nữ 15',
-  'Phòng Nữ 04': 'Phòng Nữ 16',
-  'Phòng Nữ 05': 'Phòng Nữ 17',
-  'Phòng Nữ 06': 'Phòng Nữ 18',
-  'Phòng Nữ 07': 'Phòng Nữ 19',
-  'Phòng Nữ 08': 'Phòng Nữ 20',
-  'Phòng Nữ 09': 'Phòng Nữ 21',
-  'Phòng Nữ 10': 'Phòng Nữ 22',
-  'Phòng Nữ 11': 'Phòng Nữ 23',
-  'Phòng Nữ 12': 'Phòng Nữ 24',
-  'Phòng Nữ 1': 'Phòng Nữ 13',
-  'Phòng Nữ 2': 'Phòng Nữ 14',
-  'Phòng Nữ 3': 'Phòng Nữ 15',
-  'Phòng Nữ 4': 'Phòng Nữ 16',
-  'Phòng Nữ 5': 'Phòng Nữ 17',
-  'Phòng Nữ 6': 'Phòng Nữ 18',
-  'Phòng Nữ 7': 'Phòng Nữ 19',
-  'Phòng Nữ 8': 'Phòng Nữ 20',
-  'Phòng Nữ 9': 'Phòng Nữ 21',
-};
+export const OLD_FEMALE_ROOM_NAME_MAP: Record<string, string> = {};
 
 export async function fetchAuthorizedUsers(): Promise<AuthorizedUser[]> {
   try {
@@ -191,12 +169,7 @@ export async function fetchStudents(): Promise<Student[]> {
     const list: Student[] = [];
     snap.forEach(d => {
       const data = d.data() as Student;
-      let room = data.room;
-      if (OLD_FEMALE_ROOM_NAME_MAP[room]) {
-        room = OLD_FEMALE_ROOM_NAME_MAP[room];
-        setDoc(doc(db, STUDENTS_COL, d.id), { ...data, room }).catch(() => {});
-      }
-      list.push({ ...data, room, id: d.id });
+      list.push({ ...data, id: d.id });
     });
 
     localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(list));
@@ -206,11 +179,7 @@ export async function fetchStudents(): Promise<Student[]> {
     const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
     if (local) {
       try {
-        const parsed: Student[] = JSON.parse(local);
-        return parsed.map(s => ({
-          ...s,
-          room: OLD_FEMALE_ROOM_NAME_MAP[s.room] || s.room,
-        }));
+        return JSON.parse(local);
       } catch {
         return [];
       }
@@ -229,8 +198,7 @@ export function subscribeToStudents(
       const list: Student[] = [];
       snap.forEach(d => {
         const data = d.data() as Student;
-        const room = OLD_FEMALE_ROOM_NAME_MAP[data.room] || data.room;
-        list.push({ ...data, room, id: d.id });
+        list.push({ ...data, id: d.id });
       });
 
       localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(list));
