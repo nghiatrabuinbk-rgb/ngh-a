@@ -80,8 +80,12 @@ import {
   Sparkles, 
   AlertCircle,
   QrCode,
-  Smartphone
+  Smartphone,
+  Building2,
+  RefreshCw,
+  LogOut
 } from 'lucide-react';
+import { LoginGate } from './components/LoginGate';
 
 export default function App() {
   // Current selected attendance date (YYYY-MM-DD)
@@ -170,9 +174,6 @@ export default function App() {
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
   }, [students]);
-
-  // Demo guest mode bypass for convenience if user wants to evaluate immediately
-  const [guestMode, setGuestMode] = useState<boolean>(false);
 
   // Test connection on boot & check URL search params & auth listener
   useEffect(() => {
@@ -303,19 +304,7 @@ export default function App() {
       return zaloUser;
     }
 
-    if (!currentUser && !guestMode) return null;
-
-    if (guestMode) {
-      return {
-        email: INITIAL_ADMIN_EMAIL,
-        name: 'Thầy Nghĩa (Quản Trị / BGH)',
-        role: 'admin',
-        assignedRooms: ['ALL'],
-        phone: '0981234567',
-        zaloQrData: 'https://zalo.me/0981234567',
-        active: true,
-      };
-    }
+    if (!currentUser) return null;
 
     const email = currentUser?.email?.toLowerCase().trim();
     if (!email) return null;
@@ -336,7 +325,7 @@ export default function App() {
     }
 
     return authorizedUsers.find((u) => u.email.toLowerCase() === email && u.active) || null;
-  }, [zaloUser, currentUser, authorizedUsers, guestMode]);
+  }, [zaloUser, currentUser, authorizedUsers]);
 
   const effectiveUser = useMemo(() => {
     if (zaloUser) {
@@ -345,22 +334,16 @@ export default function App() {
         displayName: zaloUser.name,
       };
     }
-    if (guestMode) {
-      return {
-        email: INITIAL_ADMIN_EMAIL,
-        displayName: 'Thầy Nghĩa (Quản Trị / BGH)',
-      };
-    }
     return currentUser;
-  }, [zaloUser, currentUser, guestMode]);
+  }, [zaloUser, currentUser]);
 
   const isUserAuthorized = Boolean(authorizedInfo);
-  const isAdmin = authorizedInfo?.role === 'admin' || guestMode;
+  const isAdmin = authorizedInfo?.role === 'admin';
 
   // Quyền truy cập các trạng thái theo phân quyền của Quản trị viên:
   // Cấp quyền trạng thái nào thì chỉ được xem và chỉnh sửa trạng thái đó, không được xem/sửa trạng thái khác
   const allowedTabs = useMemo<('attendance' | 'night_study' | 'competition' | 'room_duty' | 'report' | 'students' | 'permissions')[]>(() => {
-    // Quản trị viên (BGH / Demo Admin): Toàn quyền tất cả các trạng thái
+    // Quản trị viên (BGH): Toàn quyền tất cả các trạng thái
     if (isAdmin) {
       return ['attendance', 'night_study', 'competition', 'room_duty', 'report', 'students', 'permissions'];
     }
@@ -374,8 +357,7 @@ export default function App() {
       return ['room_duty'];
     }
 
-    // Khi chưa đăng nhập (khách xem demo ban đầu)
-    return ['attendance', 'night_study', 'competition', 'room_duty'];
+    return ['room_duty'];
   }, [isAdmin, authorizedInfo]);
 
   // Tự động chuyển về trạng thái được cấp phép nếu trạng thái hiện tại không có quyền
@@ -428,15 +410,14 @@ export default function App() {
       await loginWithGoogle();
       setZaloUser(null);
       localStorage.removeItem('qlnt_zalo_session');
-      setGuestMode(false);
     } catch (err) {
       console.error('Login failed:', err);
+      throw err;
     }
   };
 
   const handleZaloLoginSuccess = (user: AuthorizedUser) => {
     setZaloUser(user);
-    setGuestMode(false);
     localStorage.setItem('qlnt_zalo_session', JSON.stringify(user));
   };
 
@@ -461,7 +442,20 @@ export default function App() {
     }
     setZaloUser(null);
     localStorage.removeItem('qlnt_zalo_session');
-    setGuestMode(false);
+  };
+
+  const handleSwitchAccount = async () => {
+    await handleLogout();
+    await handleLogin();
+  };
+
+  const handleRefreshAuthorizedUsers = async () => {
+    try {
+      const users = await fetchAuthorizedUsers();
+      setAuthorizedUsers(users);
+    } catch (err) {
+      console.error('Refresh users failed:', err);
+    }
   };
 
   // Data Update Handlers
@@ -639,6 +633,135 @@ export default function App() {
     setAuthorizedUsers((prev) => prev.filter((u) => u.email.toLowerCase() !== email.toLowerCase()));
   };
 
+  // 1. Initial auth state verification screen
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-950 flex flex-col items-center justify-center p-4 text-white font-sans">
+        <div className="bg-slate-900/85 backdrop-blur-md border border-emerald-500/30 p-8 rounded-3xl max-w-md w-full text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto border border-emerald-400/30 animate-pulse">
+            <Building2 className="w-8 h-8 text-emerald-300" />
+          </div>
+          <div>
+            <span className="text-xs uppercase tracking-wider font-extrabold text-amber-300 block">
+              Trường PTDTBT THCS Trà Đốc - TP Đà Nẵng
+            </span>
+            <h2 className="text-base font-bold text-white mt-1">
+              HỆ THỐNG QUẢN LÝ SĨ SỐ HỌC SINH NỘI TRÚ
+            </h2>
+          </div>
+          <div className="flex items-center justify-center gap-2.5 text-xs text-emerald-200 pt-2">
+            <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+            <span>Đang kiểm tra phiên đăng nhập Gmail cá nhân...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Mandatory Login Gate: Everyone must sign in with personal Gmail
+  if (!effectiveUser) {
+    return (
+      <>
+        <LoginGate
+          onLoginWithGoogle={handleLogin}
+          onOpenZaloLogin={() => setIsZaloModalOpen(true)}
+        />
+        {isZaloModalOpen && (
+          <ZaloQrLoginModal
+            isOpen={isZaloModalOpen}
+            onClose={() => setIsZaloModalOpen(false)}
+            onZaloLoginSuccess={handleZaloLoginSuccess}
+            authorizedUsers={authorizedUsers}
+          />
+        )}
+      </>
+    );
+  }
+
+  // 3. User is logged in with Gmail, but not yet authorized by Admin in authorized_users
+  if (effectiveUser && !isUserAuthorized) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-rose-950 flex flex-col justify-between text-white selection:bg-rose-500 selection:text-white font-sans">
+        <header className="border-b border-rose-900/40 bg-slate-900/70 backdrop-blur-md sticky top-0 z-20">
+          <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-rose-500/20 rounded-xl border border-rose-400/30 shadow-inner">
+                <Building2 className="w-6 h-6 text-rose-300" />
+              </div>
+              <div>
+                <span className="text-[11px] sm:text-xs uppercase tracking-wider font-extrabold text-rose-300 block">
+                  Trường PTDTBT THCS Trà Đốc - TP Đà Nẵng
+                </span>
+                <h1 className="text-sm sm:text-base font-bold tracking-tight text-white">
+                  HỆ THỐNG QUẢN LÝ SĨ SỐ HỌC SINH NỘI TRÚ
+                </h1>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-rose-200 hover:text-white transition cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Đăng xuất</span>
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
+          <div className="max-w-lg w-full mx-auto bg-slate-900/90 backdrop-blur-xl border border-rose-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 text-center">
+            <div className="w-16 h-16 bg-rose-500/20 border border-rose-500/40 rounded-2xl flex items-center justify-center mx-auto text-rose-400 shadow-inner">
+              <ShieldAlert className="w-9 h-9" />
+            </div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-white">
+                Tài Khoản Gmail Chưa Được Phân Quyền
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 mt-2">
+                Thầy cô đã đăng nhập thành công với tài khoản Gmail:
+              </p>
+              <div className="mt-2 inline-block px-3.5 py-1.5 rounded-xl bg-slate-800 border border-rose-400/40 text-amber-300 font-bold text-sm tracking-wide">
+                {effectiveUser.email}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-rose-950/50 border border-rose-900/60 text-xs text-rose-200 text-left space-y-2 leading-relaxed">
+              <p>
+                Tài khoản này hiện chưa nằm trong danh sách giáo viên được Ban Giám Hiệu cấp quyền sử dụng các chức năng quản lý nội trú.
+              </p>
+              <p>
+                Vui lòng liên hệ Thầy Nghĩa (BGH - Quản trị viên: <strong className="text-white">{INITIAL_ADMIN_EMAIL}</strong>) để được phân công phòng trực và kích hoạt quyền.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleRefreshAuthorizedUsers}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-5 py-3 rounded-xl shadow transition cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Kiểm tra lại quyền</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSwitchAccount}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs sm:text-sm px-5 py-3 rounded-xl shadow transition cursor-pointer"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Đổi tài khoản Gmail khác</span>
+              </button>
+            </div>
+          </div>
+        </main>
+
+        <footer className="py-4 border-t border-slate-900 text-center text-xs text-slate-500">
+          © 2026 Trường PTDTBT THCS Trà Đốc - TP Đà Nẵng
+        </footer>
+      </div>
+    );
+  }
+
+  // 4. Authenticated & Authorized view: Full Boarding Management Application
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col font-sans">
       {/* Top Application Header */}
@@ -661,83 +784,6 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-5 space-y-5">
-        {/* If user is logged in with an unauthorized email */}
-        {currentUser && !isUserAuthorized && !guestMode && !zaloUser && (
-          <div className="bg-rose-50 border border-rose-300 rounded-2xl p-6 shadow-sm text-rose-900 space-y-3">
-            <div className="flex items-start gap-3">
-              <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-bold text-base">Tài khoản chưa được cấp quyền truy cập</h3>
-                <p className="text-xs text-rose-700 mt-1">
-                  Gmail <strong>{currentUser.email}</strong> chưa nằm trong danh sách giáo viên trực phòng được phê duyệt. Vui lòng liên hệ Quản trị viên (<strong>{INITIAL_ADMIN_EMAIL}</strong>) để được phân công phòng trực.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                onClick={handleLogout}
-                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition"
-              >
-                Đăng xuất tài khoản này
-              </button>
-              <button
-                onClick={() => setIsZaloModalOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition flex items-center gap-1.5"
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>Quét mã QR Zalo giáo viên</span>
-              </button>
-              <button
-                onClick={() => setGuestMode(true)}
-                className="bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 text-xs font-semibold px-4 py-2 rounded-xl transition"
-              >
-                Trải nghiệm Demo
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* If not logged in at all, show friendly prompt and quick login options */}
-        {!effectiveUser && (
-          <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-2xl p-5 shadow-lg flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-base md:text-lg text-white">
-                  Đăng nhập giáo viên trực phòng (Mã QR Zalo / Gmail)
-                </h3>
-              </div>
-              <p className="text-xs text-emerald-200/90 max-w-2xl">
-                Thầy cô có thể đưa <strong>mã QR Zalo cá nhân</strong> trước camera để đăng nhập tức thì hoặc đăng nhập bằng tài khoản Gmail được BGH cấp quyền.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap">
-              <PWAInstallButton variant="banner" />
-              <button
-                onClick={() => setIsZaloModalOpen(true)}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition transform active:scale-95 border border-blue-400"
-              >
-                <QrCode className="w-4 h-4" />
-                <span>Quét QR Zalo</span>
-              </button>
-              <button
-                onClick={handleLogin}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow transition"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Đăng nhập Gmail</span>
-              </button>
-              <button
-                onClick={() => setGuestMode(true)}
-                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl transition"
-                title="Xem thử với quyền Quản trị viên đầy đủ tính năng"
-              >
-                <span>Chế độ Demo</span>
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* KPI Stat Summary Cards (Visible for day attendance & reports) */}
         {/* Access Denied Notice when logged-in teacher tries to access an unauthorized status */}
@@ -824,7 +870,7 @@ export default function App() {
             rooms={rooms}
             currentUser={effectiveUser}
             authorizedInfo={authorizedInfo}
-            isAdmin={isAdmin || guestMode}
+            isAdmin={isAdmin}
             nightAttendanceMap={nightAttendanceMap}
             nightRoomSummaries={nightRoomSummaries}
             onSaveNightAttendance={handleSaveNightAttendance}
@@ -904,8 +950,8 @@ export default function App() {
             classes={classes}
             villages={villages}
             hamlets={hamlets}
-            canEdit={isUserAuthorized || guestMode || Boolean(authorizedInfo)}
-            isAdmin={isAdmin || guestMode}
+            canEdit={isUserAuthorized || Boolean(authorizedInfo)}
+            isAdmin={isAdmin}
           />
         )}
 
@@ -916,7 +962,7 @@ export default function App() {
             onSaveUser={handleSaveUser}
             onDeleteUser={handleDeleteUser}
             currentUserEmail={effectiveUser?.email}
-            isAdmin={isAdmin || guestMode}
+            isAdmin={isAdmin}
             rooms={rooms}
           />
         )}

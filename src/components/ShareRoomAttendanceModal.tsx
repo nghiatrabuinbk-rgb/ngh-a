@@ -86,7 +86,7 @@ export const ShareRoomAttendanceModal: React.FC<ShareRoomAttendanceModalProps> =
     text += `👥 Sĩ số phòng: ${roomStudents.length} học sinh\n`;
     text += `🔗 Link điểm danh trực tiếp: ${shareUrl}\n`;
     text += `------------------------------------\n`;
-    text += `👉 Thầy/Cô mở link trên điện thoại hoặc quét mã QR để điểm danh. Dữ liệu sẽ tự động đồng bộ tức thì với máy chủ nhà trường.`;
+    text += `👉 Thầy/Cô mở link trên điện thoại hoặc quét mã QR và đăng nhập bằng tài khoản Gmail cá nhân để điểm danh. Dữ liệu sẽ tự động đồng bộ tức thì với máy chủ nhà trường.`;
 
     navigator.clipboard.writeText(text);
     setCopiedText(true);

@@ -120,29 +120,31 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* User Account / Login */}
           {currentUser ? (
-            <div className="flex items-center gap-2 bg-white/10 border border-white/20 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm shadow-xs">
-              <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-white uppercase text-xs shadow-inner">
+            <div className="flex items-center gap-2.5 bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-xs sm:text-sm shadow-xs backdrop-blur-sm">
+              <div className="w-8 h-8 rounded-full bg-emerald-600 border border-emerald-400/50 flex items-center justify-center font-extrabold text-white uppercase text-xs shadow-inner shrink-0">
                 {currentUser.displayName ? currentUser.displayName[0] : (currentUser.email ? currentUser.email[0] : 'G')}
               </div>
               <div className="hidden sm:block text-left">
-                <div className="font-semibold leading-tight text-emerald-100 truncate max-w-[150px]">
+                <div className="font-bold leading-tight text-white truncate max-w-[160px]" title={currentUser.displayName || currentUser.email || ''}>
                   {authorizedInfo?.name || currentUser.displayName || currentUser.email}
                 </div>
-                <div className="text-[10px] text-emerald-300 flex items-center gap-1">
+                <div className="text-[10px] text-emerald-200 flex items-center gap-1.5 mt-0.5">
                   {authorizedInfo?.role === 'admin' ? (
-                    <span className="bg-amber-500/30 text-amber-200 px-1 rounded font-medium">BGH / Quản Trị</span>
+                    <span className="bg-amber-400 text-slate-950 font-extrabold px-1.5 py-0.2 rounded">BGH / Quản Trị</span>
                   ) : (
-                    <span className="bg-cyan-500/30 text-cyan-200 px-1 rounded font-medium">GV Trực Phòng</span>
+                    <span className="bg-cyan-400 text-slate-950 font-bold px-1.5 py-0.2 rounded">GV Trực Phòng</span>
                   )}
-                  {authorizedInfo?.phone && (
-                    <span className="text-emerald-300/80">• Zalo: {authorizedInfo.phone}</span>
+                  {currentUser.email && (
+                    <span className="text-emerald-300 truncate max-w-[130px] font-medium" title={currentUser.email}>
+                      • {currentUser.email}
+                    </span>
                   )}
                 </div>
               </div>
               <button
                 onClick={onLogout}
-                title="Đăng xuất"
-                className="p-1 hover:bg-white/20 rounded text-emerald-200 hover:text-white transition"
+                title="Đăng xuất khỏi tài khoản này"
+                className="p-1.5 hover:bg-rose-500/30 rounded-lg text-emerald-200 hover:text-white transition cursor-pointer ml-1"
               >
                 <LogOut className="w-4 h-4" />
               </button>
