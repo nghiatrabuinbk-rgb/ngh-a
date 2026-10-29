@@ -650,7 +650,15 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
 
       {/* Student List Cards */}
       <div className="space-y-2.5">
-        {filteredStudents.length === 0 ? (
+        {students.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 text-slate-500 space-y-2">
+            <Users className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+            <p className="font-bold text-slate-700 text-sm">Chưa có danh sách học sinh trong hệ thống</p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Toàn bộ học sinh và phòng ở đã được xóa sạch theo yêu cầu của Quản trị viên. Thầy/Cô có thể vào mục "Quản lý phòng ở & HS" để tạo phòng và nhập danh sách mới từ đầu.
+            </p>
+          </div>
+        ) : filteredStudents.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 text-slate-500">
             <Users className="w-12 h-12 mx-auto text-slate-300 mb-3" />
             <p className="font-semibold text-slate-700">Không tìm thấy học sinh nào theo bộ lọc</p>

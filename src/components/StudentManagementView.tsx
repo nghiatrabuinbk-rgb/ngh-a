@@ -886,43 +886,76 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
             )}
           </div>
 
-          {/* Grid of Room Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredRoomConfigsForCards.map((r) => {
-              const studentsInThisRoom = students.filter((s) => s.room === r.name && s.status === 'active');
-              const count = studentsInThisRoom.length;
-              const cap = r.capacity;
-              const isFemale = r.gender === 'Nữ' || r.name.toLowerCase().includes('nữ');
-              const percent = cap ? Math.min(100, Math.round((count / cap) * 100)) : 100;
+          {/* Grid of Room Cards or Empty State */}
+          {filteredRoomConfigsForCards.length === 0 ? (
+            <div className="bg-white rounded-3xl p-10 border border-slate-200 text-center space-y-3 shadow-xs">
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-700 rounded-full flex items-center justify-center mx-auto border border-emerald-200">
+                <Building2 className="w-8 h-8" />
+              </div>
+              <h3 className="text-base font-extrabold text-slate-800">
+                Chưa có phòng ở nào trong hệ thống
+              </h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Tất cả các phòng và học sinh đã được xóa sạch theo yêu cầu của Quản trị viên. Thầy/Cô có thể bấm nút bên dưới để tạo phòng ở mới từ đầu hoặc khôi phục lại 25 phòng mẫu nếu cần.
+              </p>
+              {canEdit && (
+                <div className="flex items-center justify-center gap-3 pt-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickAddRoomOpen(true)}
+                    className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>+ Thêm Phòng Ở Mới</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onResetRoomConfigs}
+                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl border border-slate-300 transition active:scale-95 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Khôi phục 25 phòng mẫu</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredRoomConfigsForCards.map((r) => {
+                const studentsInThisRoom = students.filter((s) => s.room === r.name && s.status === 'active');
+                const count = studentsInThisRoom.length;
+                const cap = r.capacity;
+                const isFemale = r.gender === 'Nữ' || r.name.toLowerCase().includes('nữ');
+                const percent = cap ? Math.min(100, Math.round((count / cap) * 100)) : 100;
 
-              // Trạng thái tự nhập của phòng
-              let statusLabel = '';
-              let statusBadgeClass = '';
-              if (!cap) {
-                statusLabel = `Đã nhập ${count} HS (Tự do)`;
-                statusBadgeClass = 'bg-purple-100 text-purple-900 border-purple-200';
-              } else if (count === 0) {
-                statusLabel = `Chưa nhập học sinh (0/${cap})`;
-                statusBadgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
-              } else if (count === cap) {
-                statusLabel = `Đã nhập đủ (${count}/${cap} giường)`;
-                statusBadgeClass = 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold';
-              } else if (count < cap) {
-                statusLabel = `Còn trống ${cap - count} giường (${count}/${cap})`;
-                statusBadgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-bold';
-              } else {
-                statusLabel = `Vượt sức chứa (+${count - cap} em)`;
-                statusBadgeClass = 'bg-rose-100 text-rose-900 border-rose-300 font-bold';
-              }
+                // Trạng thái tự nhập của phòng
+                let statusLabel = '';
+                let statusBadgeClass = '';
+                if (!cap) {
+                  statusLabel = `Đã nhập ${count} HS (Tự do)`;
+                  statusBadgeClass = 'bg-purple-100 text-purple-900 border-purple-200';
+                } else if (count === 0) {
+                  statusLabel = `Chưa nhập học sinh (0/${cap})`;
+                  statusBadgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
+                } else if (count === cap) {
+                  statusLabel = `Đã nhập đủ (${count}/${cap} giường)`;
+                  statusBadgeClass = 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold';
+                } else if (count < cap) {
+                  statusLabel = `Còn trống ${cap - count} giường (${count}/${cap})`;
+                  statusBadgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-bold';
+                } else {
+                  statusLabel = `Vượt sức chứa (+${count - cap} em)`;
+                  statusBadgeClass = 'bg-rose-100 text-rose-900 border-rose-300 font-bold';
+                }
 
-              return (
-                <div
-                  key={r.id}
-                  className={`bg-white rounded-3xl border transition shadow-sm hover:shadow-md flex flex-col justify-between overflow-hidden ${
-                    count === 0
-                      ? 'border-amber-200/80 bg-gradient-to-b from-amber-50/20 to-white'
-                      : cap && count >= cap
-                      ? 'border-emerald-200/90 bg-gradient-to-b from-emerald-50/20 to-white'
+                return (
+                  <div
+                    key={r.id}
+                    className={`bg-white rounded-3xl border transition shadow-sm hover:shadow-md flex flex-col justify-between overflow-hidden ${
+                      count === 0
+                        ? 'border-amber-200/80 bg-gradient-to-b from-amber-50/20 to-white'
+                        : cap && count >= cap
+                        ? 'border-emerald-200/90 bg-gradient-to-b from-emerald-50/20 to-white'
                       : 'border-slate-200'
                   }`}
                 >
@@ -1116,8 +1149,9 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    )}
 
       {/* ========================================================= */}
       {/* SUB-VIEW 2: STANDARD TABLE LIST VIEW                      */}

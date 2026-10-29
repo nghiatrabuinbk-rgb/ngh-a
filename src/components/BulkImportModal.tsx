@@ -54,14 +54,14 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   existingStudents,
 }) => {
   const [selectedRoom, setSelectedRoom] = useState<string>(() => {
-    return initialRoom || rooms[0] || 'Phòng Nam 01';
+    return (initialRoom && initialRoom.trim()) || rooms[0] || 'Phòng Nam 01';
   });
 
   React.useEffect(() => {
-    if (initialRoom && rooms.includes(initialRoom)) {
-      setSelectedRoom(initialRoom);
+    if (isOpen && initialRoom && initialRoom.trim()) {
+      setSelectedRoom(initialRoom.trim());
     }
-  }, [initialRoom, isOpen, rooms]);
+  }, [isOpen, initialRoom]);
 
   const [rawText, setRawText] = useState<string>('');
   const [defaultClass, setDefaultClass] = useState<string>(classes[0] || '6A');
@@ -269,6 +269,11 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 onChange={(e) => setSelectedRoom(e.target.value)}
                 className="w-full text-xs font-bold bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
               >
+                {selectedRoom && !rooms.includes(selectedRoom) && (
+                  <option value={selectedRoom}>
+                    {selectedRoom} {selectedRoom.toLowerCase().includes('nam') ? '(Nam)' : selectedRoom.toLowerCase().includes('nữ') ? '(Nữ)' : ''}
+                  </option>
+                )}
                 {rooms.map((r) => (
                   <option key={r} value={r}>
                     {r} {r.toLowerCase().includes('nam') ? '(Nam)' : r.toLowerCase().includes('nữ') ? '(Nữ)' : ''}

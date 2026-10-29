@@ -61,18 +61,21 @@ const LOCAL_STORAGE_KEY_COMPETITION_EVALS = 'qlnt_competition_evaluations_v1';
 const LOCAL_STORAGE_KEY_COMPETITION_RULES = 'qlnt_competition_rules_v1';
 const LOCAL_STORAGE_KEY_COMPETITION_BONUSES = 'qlnt_competition_bonuses_v1';
 const LOCAL_STORAGE_FLAG_CLEARED = 'qlnt_students_cleared_flag';
+const LOCAL_STORAGE_FLAG_ROOMS_CLEARED = 'qlnt_rooms_cleared_flag';
 
-// One-time client purge: ensure all client devices wipe local students and attendance cache
+// One-time client purge: ensure all client devices wipe local students, attendance and room cache
 if (typeof window !== 'undefined') {
   try {
-    const PURGE_KEY = 'qlnt_purge_v8_clean_slate_all';
+    const PURGE_KEY = 'qlnt_purge_v11_clean_all_rooms_and_students';
     if (!localStorage.getItem(PURGE_KEY)) {
       localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify([]));
       localStorage.setItem(LOCAL_STORAGE_KEY_ATTENDANCE, JSON.stringify({}));
       localStorage.setItem(LOCAL_STORAGE_KEY_SUMMARIES, JSON.stringify({}));
       localStorage.setItem(LOCAL_STORAGE_KEY_NIGHT_ATTENDANCE, JSON.stringify({}));
       localStorage.setItem(LOCAL_STORAGE_KEY_NIGHT_SUMMARIES, JSON.stringify({}));
+      localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify([]));
       localStorage.setItem(LOCAL_STORAGE_FLAG_CLEARED, 'true');
+      localStorage.setItem(LOCAL_STORAGE_FLAG_ROOMS_CLEARED, 'true');
       localStorage.setItem(PURGE_KEY, 'true');
     }
   } catch (e) {
@@ -328,41 +331,8 @@ export async function fetchRoomConfigs(): Promise<RoomConfig[]> {
     });
 
     if (list.length === 0) {
-      for (const r of DEFAULT_ROOM_CONFIGS) {
-        await setDoc(doc(db, ROOM_CONFIGS_COL, r.id), r);
-      }
-      localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(DEFAULT_ROOM_CONFIGS));
-      return DEFAULT_ROOM_CONFIGS;
-    }
-
-    // Check if migration from 01..13 to 13..25 is needed
-    const needsMigration = list.some(r => r.name === 'Phòng Nữ 01' || r.id === 'phong_nu_01' || (r.name.startsWith('Phòng Nữ 0')));
-    if (needsMigration) {
-      const migratedList: RoomConfig[] = [];
-      for (const r of list) {
-        if (OLD_FEMALE_ROOM_NAME_MAP[r.name]) {
-          const newName = OLD_FEMALE_ROOM_NAME_MAP[r.name];
-          const num = parseInt(newName.match(/\d+/)?.[0] || '13', 10);
-          const newId = `phong_nu_${num}`;
-          const updated: RoomConfig = {
-            ...r,
-            id: newId,
-            name: newName,
-            gender: 'Nữ',
-            order: num,
-          };
-          if (r.id !== newId) {
-            deleteDoc(doc(db, ROOM_CONFIGS_COL, r.id)).catch(() => {});
-          }
-          setDoc(doc(db, ROOM_CONFIGS_COL, newId), updated).catch(() => {});
-          migratedList.push(updated);
-        } else {
-          migratedList.push(r);
-        }
-      }
-      migratedList.sort((a, b) => (a.order || 0) - (b.order || 0));
-      localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(migratedList));
-      return migratedList;
+      localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify([]));
+      return [];
     }
 
     list.sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -371,30 +341,11 @@ export async function fetchRoomConfigs(): Promise<RoomConfig[]> {
   } catch (error) {
     console.warn('Fetch room configs fallback:', error);
     const local = localStorage.getItem(LOCAL_STORAGE_KEY_ROOMS);
-    if (local) {
-      let parsed: RoomConfig[] = JSON.parse(local);
-      const needsMigration = parsed.some(r => r.name === 'Phòng Nữ 01' || r.id === 'phong_nu_01' || (r.name.startsWith('Phòng Nữ 0')));
-      if (needsMigration) {
-        parsed = parsed.map(r => {
-          if (OLD_FEMALE_ROOM_NAME_MAP[r.name]) {
-            const newName = OLD_FEMALE_ROOM_NAME_MAP[r.name];
-            const num = parseInt(newName.match(/\d+/)?.[0] || '13', 10);
-            return {
-              ...r,
-              id: `phong_nu_${num}`,
-              name: newName,
-              gender: 'Nữ',
-              order: num,
-            };
-          }
-          return r;
-        });
-        parsed.sort((a, b) => (a.order || 0) - (b.order || 0));
-        localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(parsed));
-      }
+    if (local !== null) {
+      const parsed: RoomConfig[] = JSON.parse(local);
       return parsed;
     }
-    return DEFAULT_ROOM_CONFIGS;
+    return [];
   }
 }
 
@@ -409,17 +360,27 @@ export function subscribeToRoomConfigs(
       snap.forEach(d => {
         list.push({ ...(d.data() as RoomConfig), id: d.id });
       });
-      if (list.length > 0) {
-        list.sort((a, b) => (a.order || 0) - (b.order || 0));
-        localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(list));
-        onData(list);
-      }
+      list.sort((a, b) => (a.order || 0) - (b.order || 0));
+      localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify(list));
+      onData(list);
     },
     (error) => {
       console.warn('Realtime room configs subscription error:', error);
       if (onError) onError(error);
     }
   );
+}
+
+export async function clearAllRooms(): Promise<void> {
+  localStorage.setItem(LOCAL_STORAGE_FLAG_ROOMS_CLEARED, 'true');
+  localStorage.setItem(LOCAL_STORAGE_KEY_ROOMS, JSON.stringify([]));
+
+  try {
+    const snap = await getDocs(collection(db, ROOM_CONFIGS_COL));
+    await Promise.all(snap.docs.map(d => deleteDoc(doc(db, ROOM_CONFIGS_COL, d.id))));
+  } catch (error) {
+    console.warn('Clear all rooms from Firestore failed:', error);
+  }
 }
 
 export async function saveRoomConfig(room: RoomConfig): Promise<void> {

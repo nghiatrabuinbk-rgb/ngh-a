@@ -118,7 +118,7 @@ export default function App() {
 
   // App data states (Day Attendance)
   const [students, setStudents] = useState<Student[]>([]);
-  const [roomConfigs, setRoomConfigs] = useState<RoomConfig[]>(DEFAULT_ROOM_CONFIGS);
+  const [roomConfigs, setRoomConfigs] = useState<RoomConfig[]>([]);
   const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceRecord>>({});
   const [roomSummaries, setRoomSummaries] = useState<Record<string, RoomSummary>>({});
 
@@ -132,7 +132,7 @@ export default function App() {
   // Master dynamic lists (derived from roomConfigs + any rooms present in students)
   const rooms = useMemo(() => {
     const listFromConfig = roomConfigs.map((r) => r.name);
-    const set = new Set<string>(listFromConfig.length > 0 ? listFromConfig : INITIAL_ROOMS);
+    const set = new Set<string>(listFromConfig);
     students.forEach((s) => {
       if (s.room && s.room.trim()) set.add(s.room.trim());
     });
@@ -236,9 +236,7 @@ export default function App() {
     });
 
     const unsubRooms = subscribeToRoomConfigs((configs) => {
-      if (configs && configs.length > 0) {
-        setRoomConfigs(configs);
-      }
+      setRoomConfigs(configs || []);
     });
 
     return () => {
