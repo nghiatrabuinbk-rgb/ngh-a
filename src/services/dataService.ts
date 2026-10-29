@@ -78,6 +78,13 @@ if (typeof window !== 'undefined') {
       localStorage.setItem(LOCAL_STORAGE_FLAG_ROOMS_CLEARED, 'true');
       localStorage.setItem(PURGE_KEY, 'true');
     }
+
+    // Invalidate local students cache to ensure Phòng Nữ 13 restored students reflect immediately on all client browsers
+    const ROOM13_RESTORE_KEY = 'qlnt_restore_v13_room13_students';
+    if (!localStorage.getItem(ROOM13_RESTORE_KEY)) {
+      localStorage.removeItem(LOCAL_STORAGE_KEY_STUDENTS);
+      localStorage.setItem(ROOM13_RESTORE_KEY, 'true');
+    }
   } catch (e) {
     console.warn('Storage purge warning:', e);
   }
@@ -250,8 +257,15 @@ export async function saveStudentsBatch(
 ): Promise<Student[]> {
   localStorage.removeItem(LOCAL_STORAGE_FLAG_CLEARED);
 
-  const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
-  let currentStudents: Student[] = local ? JSON.parse(local) : [];
+  // Fetch current students from Firestore to avoid stale/partial localStorage overwriting other rooms
+  let currentStudents: Student[] = [];
+  try {
+    const snap = await getDocs(collection(db, STUDENTS_COL));
+    currentStudents = snap.docs.map(d => ({ ...(d.data() as Student), id: d.id }));
+  } catch (err) {
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
+    currentStudents = local ? JSON.parse(local) : [];
+  }
 
   if (replaceRoom) {
     // Delete students of this room from Firestore and local
