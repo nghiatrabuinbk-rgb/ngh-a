@@ -79,7 +79,8 @@ import {
   DEFAULT_COMPETITION_DEDUCTION_RULES,
   fetchRoomCompetitionBonuses,
   saveRoomCompetitionBonus,
-  deleteRoomCompetitionBonus
+  deleteRoomCompetitionBonus,
+  isSameRoom
 } from '../services/dataService';
 import { MALE_ROOMS, FEMALE_ROOMS } from '../mockData';
 
@@ -636,7 +637,7 @@ export const CompetitionScoringView: React.FC<CompetitionScoringViewProps> = ({
     hasDepartmentEvaluation: boolean
   ): RoomAttendanceBreakdown => {
     // 1. Students belonging to this room
-    const roomStudents = students.filter((s) => s.room === roomName && s.status === 'active');
+    const roomStudents = students.filter((s) => isSameRoom(s.room, roomName) && s.status === 'active');
 
     // Mục 1: Điểm danh của GVCN (Chính khóa)
     let dayLeaveUnexcusedCount = 0;

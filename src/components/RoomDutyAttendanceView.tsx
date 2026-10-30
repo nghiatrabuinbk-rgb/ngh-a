@@ -34,10 +34,11 @@ import {
   AttendanceStatus, 
   STATUS_CONFIG, 
   RoomSummary, 
-  AuthorizedUser,
+  AuthorizedUser, 
   RoomConfig 
 } from '../types';
 import { ShareRoomAttendanceModal } from './ShareRoomAttendanceModal';
+import { isSameRoom } from '../services/dataService';
 
 interface RoomDutyAttendanceViewProps {
   currentDate: string;
@@ -169,7 +170,7 @@ export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
       if (selectedGenderZone === 'assigned' && !assignedRoomsList.includes(s.room)) return false;
 
       // Room filter
-      if (selectedRoom !== 'ALL' && s.room !== selectedRoom) return false;
+      if (selectedRoom !== 'ALL' && !isSameRoom(s.room, selectedRoom)) return false;
       if (selectedClass !== 'ALL' && s.class !== selectedClass) return false;
       if (selectedVillage !== 'ALL' && s.village !== selectedVillage) return false;
       if (selectedHamlet !== 'ALL' && s.hamlet !== selectedHamlet) return false;
@@ -436,7 +437,7 @@ export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
       // Save room summaries for affected rooms
       const targetRooms = selectedRoom === 'ALL' ? rooms : [selectedRoom];
       for (const r of targetRooms) {
-        const roomStudents = students.filter((s) => s.room === r && s.status === 'active');
+        const roomStudents = students.filter((s) => isSameRoom(s.room, r) && s.status === 'active');
         if (roomStudents.length === 0) continue;
 
         let present = 0;
@@ -764,7 +765,7 @@ export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
           {visibleRoomsList.map((r) => {
             const isSelected = selectedRoom === r;
             const isMale = r.toLowerCase().includes('nam');
-            const roomStudents = students.filter((s) => s.room === r && s.status === 'active');
+            const roomStudents = students.filter((s) => isSameRoom(s.room, r) && s.status === 'active');
             const presentInRoom = roomStudents.filter((s) => (draftAttendance[s.id]?.status || 'present') === 'present').length;
             const weekendInRoom = roomStudents.filter((s) => Boolean(draftAttendance[s.id]?.stayWeekend)).length;
 
@@ -1279,7 +1280,7 @@ export const RoomDutyAttendanceView: React.FC<RoomDutyAttendanceViewProps> = ({
         roomStudents={
           shareTargetRoom === 'ALL'
             ? students.filter((s) => s.status === 'active')
-            : students.filter((s) => s.room === shareTargetRoom && s.status === 'active')
+            : students.filter((s) => isSameRoom(s.room, shareTargetRoom) && s.status === 'active')
         }
         onForceSyncToServer={onForceSyncToServer}
       />

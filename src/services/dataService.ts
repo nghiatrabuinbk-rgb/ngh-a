@@ -27,6 +27,7 @@ import {
 } from '../types';
 import { 
   SEED_STUDENTS, 
+  ROOM_13_STUDENTS_PERMANENT,
   INITIAL_ADMIN_EMAIL, 
   DEFAULT_TEACHERS_LIST, 
   DEFAULT_ROOM_CONFIGS,
@@ -80,7 +81,7 @@ if (typeof window !== 'undefined') {
     }
 
     // Invalidate local students cache to ensure Phòng Nữ 13 restored students reflect immediately on all client browsers
-    const ROOM13_RESTORE_KEY = 'qlnt_restore_v13_room13_students';
+    const ROOM13_RESTORE_KEY = 'qlnt_restore_v14_fixed_room13_permanent';
     if (!localStorage.getItem(ROOM13_RESTORE_KEY)) {
       localStorage.removeItem(LOCAL_STORAGE_KEY_STUDENTS);
       localStorage.setItem(ROOM13_RESTORE_KEY, 'true');
@@ -100,6 +101,60 @@ export const DEFAULT_COMPETITION_DEDUCTION_RULES: CompetitionDeductionRules = {
 
 // Bản đồ chuyển đổi số phòng khu Nữ từ 01..13 sang 13..25 theo yêu cầu người dùng
 export const OLD_FEMALE_ROOM_NAME_MAP: Record<string, string> = {};
+
+/**
+ * Chuẩn hóa tên phòng ở để xử lý triệt để sự sai lệch giữa:
+ * "Phòng 13", "Nữ 13", "Phòng Nữ 13", "13", "phòng 13", "Phòng Nữ 13 "
+ * Luôn đưa về tên chuẩn của hệ thống:
+ * 1..12 -> "Phòng Nam 01" .. "Phòng Nam 12"
+ * 13..25 -> "Phòng Nữ 13" .. "Phòng Nữ 25"
+ */
+export function normalizeRoomName(room?: string | null): string {
+  if (!room) return '';
+  const trimmed = room.trim();
+  if (!trimmed) return '';
+
+  const numMatch = trimmed.match(/\d+/);
+  if (numMatch) {
+    const num = parseInt(numMatch[0], 10);
+    if (num >= 13 && num <= 25) {
+      return `Phòng Nữ ${String(num).padStart(2, '0')}`;
+    }
+    if (num >= 1 && num <= 12) {
+      return `Phòng Nam ${String(num).padStart(2, '0')}`;
+    }
+  }
+
+  return trimmed;
+}
+
+/**
+ * So sánh 2 tên phòng xem có cùng chỉ một phòng hay không
+ * "Phòng 13" === "Phòng Nữ 13" === "Nữ 13" === "13" -> true
+ */
+export function isSameRoom(roomA?: string | null, roomB?: string | null): boolean {
+  if (!roomA || !roomB) return false;
+  if (roomA.trim() === roomB.trim()) return true;
+  return normalizeRoomName(roomA) === normalizeRoomName(roomB);
+}
+
+/**
+ * Khôi phục tức thì danh sách 13 học sinh chuẩn của Phòng Nữ 13 lên Firestore và bộ nhớ đệm
+ */
+export async function restoreRoom13Students(): Promise<Student[]> {
+  for (const st of ROOM_13_STUDENTS_PERMANENT) {
+    try {
+      await setDoc(doc(db, STUDENTS_COL, st.id), {
+        ...st,
+        room: 'Phòng Nữ 13',
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn('Restore room 13 student error:', st.id, e);
+    }
+  }
+  return fetchStudents();
+}
 
 export async function fetchAuthorizedUsers(): Promise<AuthorizedUser[]> {
   try {
@@ -176,11 +231,35 @@ export async function deleteAuthorizedUser(email: string): Promise<void> {
 export async function fetchStudents(): Promise<Student[]> {
   try {
     const snap = await getDocs(collection(db, STUDENTS_COL));
-    const list: Student[] = [];
+    let list: Student[] = [];
     snap.forEach(d => {
       const data = d.data() as Student;
-      list.push({ ...data, id: d.id });
+      list.push({ ...data, id: d.id, room: normalizeRoomName(data.room) });
     });
+
+    // BẢO VỆ TỰ ĐỘNG PHÒNG NỮ 13: Đảm bảo 13 học sinh của Phòng Nữ 13 luôn thuộc về Phòng Nữ 13
+    const room13Ids = new Set(ROOM_13_STUDENTS_PERMANENT.map(s => s.id));
+    list = list.map(s => {
+      if (room13Ids.has(s.id) && !isSameRoom(s.room, 'Phòng Nữ 13')) {
+        return { ...s, room: 'Phòng Nữ 13' };
+      }
+      return s;
+    });
+
+    const r13Count = list.filter(s => isSameRoom(s.room, 'Phòng Nữ 13') && s.status === 'active').length;
+    if (r13Count < 13) {
+      console.log('Tự động khôi phục danh sách học sinh chuẩn cho Phòng Nữ 13...');
+      for (const st of ROOM_13_STUDENTS_PERMANENT) {
+        const existing = list.find(s => s.id === st.id);
+        if (!existing) {
+          list.push(st);
+          setDoc(doc(db, STUDENTS_COL, st.id), { ...st, room: 'Phòng Nữ 13', updatedAt: new Date().toISOString() }).catch(console.warn);
+        } else if (!isSameRoom(existing.room, 'Phòng Nữ 13')) {
+          existing.room = 'Phòng Nữ 13';
+          setDoc(doc(db, STUDENTS_COL, st.id), { ...existing, room: 'Phòng Nữ 13', updatedAt: new Date().toISOString() }).catch(console.warn);
+        }
+      }
+    }
 
     localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(list));
     return list;
@@ -189,12 +268,26 @@ export async function fetchStudents(): Promise<Student[]> {
     const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
     if (local) {
       try {
-        return JSON.parse(local);
+        let parsed: Student[] = JSON.parse(local);
+        const room13Ids = new Set(ROOM_13_STUDENTS_PERMANENT.map(s => s.id));
+        parsed = parsed.map(s => {
+          if (room13Ids.has(s.id)) return { ...s, room: 'Phòng Nữ 13' };
+          return s;
+        });
+        const r13Count = parsed.filter(s => isSameRoom(s.room, 'Phòng Nữ 13') && s.status === 'active').length;
+        if (r13Count < 13) {
+          for (const st of ROOM_13_STUDENTS_PERMANENT) {
+            if (!parsed.some(s => s.id === st.id)) {
+              parsed.push(st);
+            }
+          }
+        }
+        return parsed.map(s => ({ ...s, room: normalizeRoomName(s.room) }));
       } catch {
-        return [];
+        return ROOM_13_STUDENTS_PERMANENT;
       }
     }
-    return [];
+    return ROOM_13_STUDENTS_PERMANENT;
   }
 }
 
@@ -205,11 +298,34 @@ export function subscribeToStudents(
   return onSnapshot(
     collection(db, STUDENTS_COL),
     (snap) => {
-      const list: Student[] = [];
+      let list: Student[] = [];
       snap.forEach(d => {
         const data = d.data() as Student;
-        list.push({ ...data, id: d.id });
+        list.push({ ...data, id: d.id, room: normalizeRoomName(data.room) });
       });
+
+      // BẢO VỆ TỰ ĐỘNG PHÒNG NỮ 13: Đảm bảo 13 học sinh của Phòng Nữ 13 luôn thuộc về Phòng Nữ 13
+      const room13Ids = new Set(ROOM_13_STUDENTS_PERMANENT.map(s => s.id));
+      list = list.map(s => {
+        if (room13Ids.has(s.id) && !isSameRoom(s.room, 'Phòng Nữ 13')) {
+          return { ...s, room: 'Phòng Nữ 13' };
+        }
+        return s;
+      });
+
+      const r13Count = list.filter(s => isSameRoom(s.room, 'Phòng Nữ 13') && s.status === 'active').length;
+      if (r13Count < 13) {
+        for (const st of ROOM_13_STUDENTS_PERMANENT) {
+          const existing = list.find(s => s.id === st.id);
+          if (!existing) {
+            list.push(st);
+            setDoc(doc(db, STUDENTS_COL, st.id), { ...st, room: 'Phòng Nữ 13', updatedAt: new Date().toISOString() }).catch(console.warn);
+          } else if (!isSameRoom(existing.room, 'Phòng Nữ 13')) {
+            existing.room = 'Phòng Nữ 13';
+            setDoc(doc(db, STUDENTS_COL, st.id), { ...existing, room: 'Phòng Nữ 13', updatedAt: new Date().toISOString() }).catch(console.warn);
+          }
+        }
+      }
 
       localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(list));
       onData(list);
@@ -257,30 +373,46 @@ export async function saveStudentsBatch(
 ): Promise<Student[]> {
   localStorage.removeItem(LOCAL_STORAGE_FLAG_CLEARED);
 
+  // Normalize all incoming students' room names
+  const normalizedNewStudents = newStudents.map(s => ({
+    ...s,
+    room: normalizeRoomName(s.room),
+  }));
+
   // Fetch current students from Firestore to avoid stale/partial localStorage overwriting other rooms
   let currentStudents: Student[] = [];
   try {
     const snap = await getDocs(collection(db, STUDENTS_COL));
-    currentStudents = snap.docs.map(d => ({ ...(d.data() as Student), id: d.id }));
+    currentStudents = snap.docs.map(d => {
+      const data = d.data() as Student;
+      return { ...data, id: d.id, room: normalizeRoomName(data.room) };
+    });
   } catch (err) {
     const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
     currentStudents = local ? JSON.parse(local) : [];
   }
 
   if (replaceRoom) {
+    const normReplace = normalizeRoomName(replaceRoom);
     // Delete students of this room from Firestore and local
-    currentStudents = currentStudents.filter(s => s.room !== replaceRoom);
+    currentStudents = currentStudents.filter(s => !isSameRoom(s.room, normReplace));
     try {
-      const q = query(collection(db, STUDENTS_COL), where('room', '==', replaceRoom));
+      const q = query(collection(db, STUDENTS_COL));
       const snap = await getDocs(q);
-      const delPromises = snap.docs.map(d => deleteDoc(doc(db, STUDENTS_COL, d.id)));
+      const delPromises: Promise<void>[] = [];
+      snap.docs.forEach(d => {
+        const data = d.data() as Student;
+        if (isSameRoom(data.room, normReplace)) {
+          delPromises.push(deleteDoc(doc(db, STUDENTS_COL, d.id)));
+        }
+      });
       await Promise.all(delPromises);
     } catch (err) {
       console.warn('Batch delete old room students failed:', err);
     }
   }
 
-  for (const s of newStudents) {
+  for (const s of normalizedNewStudents) {
     const idx = currentStudents.findIndex(item => item.id === s.id);
     if (idx >= 0) {
       currentStudents[idx] = s;
@@ -303,9 +435,14 @@ export async function saveStudentsBatch(
 
 export async function saveStudent(student: Student): Promise<void> {
   localStorage.removeItem(LOCAL_STORAGE_FLAG_CLEARED);
+  const normalized: Student = {
+    ...student,
+    room: normalizeRoomName(student.room),
+  };
+
   try {
-    await setDoc(doc(db, STUDENTS_COL, student.id), {
-      ...student,
+    await setDoc(doc(db, STUDENTS_COL, normalized.id), {
+      ...normalized,
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
@@ -313,11 +450,11 @@ export async function saveStudent(student: Student): Promise<void> {
   }
   const local = localStorage.getItem(LOCAL_STORAGE_KEY_STUDENTS);
   let list: Student[] = local ? JSON.parse(local) : [];
-  const idx = list.findIndex(s => s.id === student.id);
+  const idx = list.findIndex(s => s.id === normalized.id);
   if (idx >= 0) {
-    list[idx] = student;
+    list[idx] = normalized;
   } else {
-    list.push(student);
+    list.push(normalized);
   }
   localStorage.setItem(LOCAL_STORAGE_KEY_STUDENTS, JSON.stringify(list));
 }

@@ -59,7 +59,9 @@ import {
   subscribeToRoomSummaries,
   subscribeToNightAttendanceForDate,
   subscribeToNightRoomSummaries,
-  syncPendingLocalDataToServer
+  syncPendingLocalDataToServer,
+  isSameRoom,
+  normalizeRoomName
 } from './services/dataService';
 import { Header } from './components/Header';
 import { StatSummaryCards } from './components/StatSummaryCards';
@@ -551,7 +553,7 @@ export default function App() {
 
     if (roomName) {
       const destination = targetNewRoomForStudents || 'Chưa xếp phòng';
-      const affected = students.filter((s) => s.room === roomName);
+      const affected = students.filter((s) => isSameRoom(s.room, roomName));
       if (affected.length > 0) {
         for (const st of affected) {
           await saveStudent({
@@ -562,7 +564,7 @@ export default function App() {
         }
         setStudents((prev) =>
           prev.map((s) =>
-            s.room === roomName
+            isSameRoom(s.room, roomName)
               ? {
                   ...s,
                   room: destination,

@@ -14,6 +14,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { RoomConfig, Student } from '../types';
+import { isSameRoom } from '../services/dataService';
 
 interface DeleteRoomsModalProps {
   isOpen: boolean;
@@ -73,7 +74,7 @@ export const DeleteRoomsModal: React.FC<DeleteRoomsModalProps> = ({
   const studentCountMap = useMemo(() => {
     const map: Record<string, number> = {};
     roomConfigs.forEach((r) => {
-      map[r.name] = students.filter((s) => s.room === r.name && s.status === 'active').length;
+      map[r.name] = students.filter((s) => isSameRoom(s.room, r.name) && s.status === 'active').length;
     });
     return map;
   }, [roomConfigs, students]);

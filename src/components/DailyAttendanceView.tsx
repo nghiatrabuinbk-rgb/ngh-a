@@ -28,6 +28,7 @@ import {
   AuthorizedUser 
 } from '../types';
 import { ShareRoomAttendanceModal } from './ShareRoomAttendanceModal';
+import { isSameRoom } from '../services/dataService';
 
 interface DailyAttendanceViewProps {
   currentDate: string;
@@ -124,7 +125,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
       if (s.status !== 'active') return false;
-      if (selectedRoom !== 'ALL' && s.room !== selectedRoom) return false;
+      if (selectedRoom !== 'ALL' && !isSameRoom(s.room, selectedRoom)) return false;
       if (selectedClass !== 'ALL' && s.class !== selectedClass) return false;
       if (selectedVillage !== 'ALL' && s.village !== selectedVillage) return false;
       if (selectedHamlet !== 'ALL' && s.hamlet !== selectedHamlet) return false;
@@ -345,7 +346,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
       // Save room summaries for all affected rooms
       const targetRooms = selectedRoom === 'ALL' ? rooms : [selectedRoom];
       for (const r of targetRooms) {
-        const roomStudents = students.filter((s) => s.room === r && s.status === 'active');
+        const roomStudents = students.filter((s) => isSameRoom(s.room, r) && s.status === 'active');
         if (roomStudents.length === 0) continue;
 
         let present = 0;
@@ -922,7 +923,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
         roomStudents={
           shareTargetRoom === 'ALL'
             ? students.filter((s) => s.status === 'active')
-            : students.filter((s) => s.room === shareTargetRoom && s.status === 'active')
+            : students.filter((s) => isSameRoom(s.room, shareTargetRoom) && s.status === 'active')
         }
         onForceSyncToServer={onForceSyncToServer}
       />

@@ -41,7 +41,7 @@ import {
   DetailedReportItem, 
   RoomStatsRow 
 } from '../utils/exportReport';
-import { fetchAttendanceForDateRange } from '../services/dataService';
+import { fetchAttendanceForDateRange, isSameRoom } from '../services/dataService';
 
 interface MasterReportViewProps {
   currentDate: string;
@@ -356,7 +356,7 @@ export const MasterReportView: React.FC<MasterReportViewProps> = ({
 
     // Filter by Room
     if (filterRoom !== 'ALL') {
-      items = items.filter((i) => i.room === filterRoom);
+      items = items.filter((i) => isSameRoom(i.room, filterRoom));
     }
 
     // Filter by Village
@@ -393,7 +393,7 @@ export const MasterReportView: React.FC<MasterReportViewProps> = ({
   // Compute room-level statistics for current day / period
   const roomStats: RoomStatsRow[] = useMemo(() => {
     return rooms.map((room) => {
-      const roomStudents = students.filter((s) => s.room === room && s.status === 'active');
+      const roomStudents = students.filter((s) => isSameRoom(s.room, room) && s.status === 'active');
       let present = 0;
       let ateNoClass = 0;
       let notAtSchool = 0;
@@ -1494,9 +1494,9 @@ export const MasterReportView: React.FC<MasterReportViewProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {roomStats
-              .filter((r) => selectedRoomFilter === 'ALL' || r.room === selectedRoomFilter)
+              .filter((r) => selectedRoomFilter === 'ALL' || isSameRoom(r.room, selectedRoomFilter))
               .map((room) => {
-                const roomStudentList = students.filter((s) => s.room === room.room && s.status === 'active');
+                const roomStudentList = students.filter((s) => isSameRoom(s.room, room.room) && s.status === 'active');
                 return (
                   <div key={room.room} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
                     <div className="flex items-start justify-between border-b border-slate-100 pb-2.5">

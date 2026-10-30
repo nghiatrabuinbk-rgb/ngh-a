@@ -34,6 +34,7 @@ import {
 } from '../types';
 import { exportNightStudyToExcel, NightRoomStatsRow } from '../utils/exportNightReport';
 import { ShareRoomAttendanceModal } from './ShareRoomAttendanceModal';
+import { isSameRoom } from '../services/dataService';
 
 interface NightStudyAttendanceViewProps {
   currentDate: string;
@@ -107,7 +108,7 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
   // Students in selected room
   const roomStudents = useMemo(() => {
     if (selectedRoom === 'ALL') return activeStudents;
-    return activeStudents.filter((s) => s.room === selectedRoom);
+    return activeStudents.filter((s) => isSameRoom(s.room, selectedRoom));
   }, [activeStudents, selectedRoom]);
 
   // Split rooms into 12 Male and 13 Female
@@ -254,7 +255,7 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
   // Overall School Statistics for all 25 rooms
   const schoolNightStatsRows: NightRoomStatsRow[] = useMemo(() => {
     return rooms.map((room) => {
-      const rStudents = activeStudents.filter((s) => s.room === room);
+      const rStudents = activeStudents.filter((s) => isSameRoom(s.room, room));
       let pres = 0;
       let exc = 0;
       let unexc = 0;
@@ -509,7 +510,7 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
               </div>
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
                 {maleRooms.map((r) => {
-                  const count = activeStudents.filter((s) => s.room === r).length;
+                  const count = activeStudents.filter((s) => isSameRoom(s.room, r)).length;
                   const isDone = nightRoomSummaries[r]?.submitted;
                   return (
                     <button
@@ -538,7 +539,7 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
               </div>
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
                 {femaleRooms.map((r) => {
-                  const count = activeStudents.filter((s) => s.room === r).length;
+                  const count = activeStudents.filter((s) => isSameRoom(s.room, r)).length;
                   const isDone = nightRoomSummaries[r]?.submitted;
                   return (
                     <button
@@ -1005,7 +1006,7 @@ export const NightStudyAttendanceView: React.FC<NightStudyAttendanceViewProps> =
         roomStudents={
           shareTargetRoom === 'ALL'
             ? students.filter((s) => s.status === 'active')
-            : students.filter((s) => s.room === shareTargetRoom && s.status === 'active')
+            : students.filter((s) => isSameRoom(s.room, shareTargetRoom) && s.status === 'active')
         }
         onForceSyncToServer={onForceSyncToServer}
       />

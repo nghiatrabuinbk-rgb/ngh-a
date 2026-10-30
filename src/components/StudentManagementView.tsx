@@ -38,6 +38,7 @@ import { BulkImportModal } from './BulkImportModal';
 import { RoomManagementModal } from './RoomManagementModal';
 import { QuickAddRoomModal } from './QuickAddRoomModal';
 import { DeleteRoomsModal } from './DeleteRoomsModal';
+import { isSameRoom, normalizeRoomName, restoreRoom13Students } from '../services/dataService';
 
 interface StudentManagementViewProps {
   students: Student[];
@@ -155,7 +156,7 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
     let totalBedCapacity = 0;
 
     roomConfigs.forEach((r) => {
-      const count = students.filter((s) => s.room === r.name && s.status === 'active').length;
+      const count = students.filter((s) => isSameRoom(s.room, r.name) && s.status === 'active').length;
       totalAssignedStudents += count;
       if (r.capacity) {
         totalBedCapacity += r.capacity;
@@ -234,7 +235,7 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
     setFormDob('2012-01-01');
 
     // Calculate next available bed in this room
-    const inRoom = students.filter((s) => s.room === targetRoom && s.status === 'active');
+    const inRoom = students.filter((s) => isSameRoom(s.room, targetRoom) && s.status === 'active');
     const nextBedNum = inRoom.length + 1;
     setFormBedNumber(`Giường ${String(nextBedNum).padStart(2, '0')}`);
     setFormClass(classes[0] || '6A');
@@ -333,7 +334,7 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
       if (s.status !== 'active') return false;
-      if (filterRoom !== 'ALL' && s.room !== filterRoom) return false;
+      if (filterRoom !== 'ALL' && !isSameRoom(s.room, filterRoom)) return false;
       if (filterClass !== 'ALL' && s.class !== filterClass) return false;
       if (filterHamlet !== 'ALL' && s.hamlet !== filterHamlet) return false;
 
@@ -370,13 +371,13 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
   // Active students in selected room for bed matrix
   const studentsInSelectedRoom = useMemo(() => {
     if (filterRoom === 'ALL') return [];
-    return students.filter((s) => s.room === filterRoom && s.status === 'active');
+    return students.filter((s) => isSameRoom(s.room, filterRoom) && s.status === 'active');
   }, [students, filterRoom]);
 
   // Room cards filtered by status in rooms_overview
   const filteredRoomConfigsForCards = useMemo(() => {
     return roomConfigs.filter((r) => {
-      const count = students.filter((s) => s.room === r.name && s.status === 'active').length;
+      const count = students.filter((s) => isSameRoom(s.room, r.name) && s.status === 'active').length;
       const cap = r.capacity;
 
       if (roomFilterCardStatus === 'empty') {
@@ -608,7 +609,7 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
           <span className="text-[11px] font-bold text-blue-900 shrink-0">Phòng Nam:</span>
           {maleRoomConfigs.map((r) => {
-            const count = students.filter((s) => s.room === r.name && s.status === 'active').length;
+            const count = students.filter((s) => isSameRoom(s.room, r.name) && s.status === 'active').length;
             const isSelected = filterRoom === r.name;
             const cap = r.capacity;
             const isFull = cap && count >= cap;
@@ -644,7 +645,7 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs pt-1.5 border-t border-slate-100">
           <span className="text-[11px] font-bold text-rose-900 shrink-0">Phòng Nữ:</span>
           {femaleRoomConfigs.map((r) => {
-            const count = students.filter((s) => s.room === r.name && s.status === 'active').length;
+            const count = students.filter((s) => isSameRoom(s.room, r.name) && s.status === 'active').length;
             const isSelected = filterRoom === r.name;
             const cap = r.capacity;
             const isFull = cap && count >= cap;
@@ -922,7 +923,7 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredRoomConfigsForCards.map((r) => {
-                const studentsInThisRoom = students.filter((s) => s.room === r.name && s.status === 'active');
+                const studentsInThisRoom = students.filter((s) => isSameRoom(s.room, r.name) && s.status === 'active');
                 const count = studentsInThisRoom.length;
                 const cap = r.capacity;
                 const isFemale = r.gender === 'Nữ' || r.name.toLowerCase().includes('nữ');
@@ -1061,6 +1062,21 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
                         <p className="text-[11px] text-slate-400">
                           Bạn có thể tự nhập từng em hoặc copy & dán hàng loạt từ file Excel.
                         </p>
+                        {isSameRoom(r.name, 'Phòng Nữ 13') && canEdit && (
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const restored = await restoreRoom13Students();
+                                await onSaveBatchStudents(restored);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>Khôi phục ngay 13 học sinh Phòng Nữ 13</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
@@ -1132,6 +1148,22 @@ export const StudentManagementView: React.FC<StudentManagementViewProps> = ({
                     >
                       <LayoutGrid className="w-4 h-4 text-slate-600" />
                     </button>
+
+                    {/* NÚT KHÔI PHỤC DANH SÁCH CHUẨN PHÒNG 13 (NẾU LÀ PHÒNG NỮ 13) */}
+                    {isSameRoom(r.name, 'Phòng Nữ 13') && canEdit && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const restored = await restoreRoom13Students();
+                          await onSaveBatchStudents(restored);
+                          alert('Đã khôi phục và lưu thành công danh sách 13 học sinh cho Phòng Nữ 13!');
+                        }}
+                        className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl border border-amber-300 transition"
+                        title="Khôi phục danh sách chuẩn 13 học sinh Phòng Nữ 13"
+                      >
+                        <RefreshCw className="w-4 h-4 text-amber-700" />
+                      </button>
+                    )}
 
                     {/* NÚT TÙY CHỌN XÓA PHÒNG NÀY */}
                     {canEdit && (

@@ -13,6 +13,7 @@ import {
   AlertTriangle 
 } from 'lucide-react';
 import { RoomConfig, Student } from '../types';
+import { isSameRoom } from '../services/dataService';
 
 interface RoomManagementModalProps {
   isOpen: boolean;
@@ -105,7 +106,7 @@ export const RoomManagementModal: React.FC<RoomManagementModalProps> = ({
   };
 
   const handleDeleteRoom = async (room: RoomConfig) => {
-    const studentCount = students.filter((s) => s.room === room.name && s.status === 'active').length;
+    const studentCount = students.filter((s) => isSameRoom(s.room, room.name) && s.status === 'active').length;
     if (studentCount > 0) {
       if (!confirm(`Phòng "${room.name}" hiện đang có ${studentCount} học sinh đang ở. Nếu xóa phòng, các em này sẽ cần được chuyển sang phòng khác. Bạn vẫn muốn tiếp tục xóa phòng này?`)) {
         return;
@@ -314,7 +315,7 @@ export const RoomManagementModal: React.FC<RoomManagementModalProps> = ({
               <tbody className="divide-y divide-slate-100">
                 {roomConfigs.map((room, idx) => {
                   const currentStudentsInRoom = students.filter(
-                    (s) => s.room === room.name && s.status === 'active'
+                    (s) => isSameRoom(s.room, room.name) && s.status === 'active'
                   );
                   const isFull = room.capacity && currentStudentsInRoom.length >= room.capacity;
                   const isOver = room.capacity && currentStudentsInRoom.length > room.capacity;

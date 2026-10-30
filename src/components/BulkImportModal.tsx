@@ -17,6 +17,7 @@ import {
   Home
 } from 'lucide-react';
 import { Student, RoomConfig } from '../types';
+import { normalizeRoomName, isSameRoom } from '../services/dataService';
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -95,7 +96,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
   // Number of students currently in this room
   const currentRoomStudentsCount = useMemo(() => {
-    return existingStudents.filter((s) => s.room === selectedRoom && s.status === 'active').length;
+    return existingStudents.filter((s) => isSameRoom(s.room, selectedRoom) && s.status === 'active').length;
   }, [existingStudents, selectedRoom]);
 
   // Parser: converts pasted raw text into structured rows
@@ -182,6 +183,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     setIsSubmitting(true);
     try {
       const timestamp = Date.now();
+      const normRoom = normalizeRoomName(selectedRoom);
       const newStudents: Student[] = parsedRows.map((r, i) => {
         const effective = {
           ...r,
@@ -192,7 +194,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           name: effective.name,
           gender: effective.gender,
           dob: '2012-01-01',
-          room: selectedRoom,
+          room: normRoom,
           bedNumber: effective.bedNumber || `Giường ${String(i + 1).padStart(2, '0')}`,
           class: effective.className,
           village: effective.village,
@@ -204,9 +206,9 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         };
       });
 
-      await onSaveBatch(newStudents, importMode === 'replace' ? selectedRoom : undefined);
+      await onSaveBatch(newStudents, importMode === 'replace' ? normRoom : undefined);
 
-      setSuccessMessage(`Đã nhập thành công ${newStudents.length} học sinh vào ${selectedRoom}!`);
+      setSuccessMessage(`Đã nhập thành công ${newStudents.length} học sinh vào ${normRoom}!`);
       setTimeout(() => {
         setSuccessMessage('');
         onClose();
